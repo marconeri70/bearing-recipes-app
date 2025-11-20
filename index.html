@@ -36,11 +36,18 @@
       </div>
 
       <div class="toolbar">
+        <!-- CSV -->
         <button id="btn-import" class="btn btn-secondary btn-sm">📥 Importa CSV</button>
         <input type="file" id="file-import" accept=".csv" style="display:none">
 
         <button id="btn-export-csv" class="btn btn-secondary btn-sm">📤 Esporta CSV</button>
         <button id="btn-export-pdf" class="btn btn-secondary btn-sm">📄 Esporta PDF</button>
+
+        <!-- ZIP -->
+        <button id="btn-import-zip" class="btn btn-secondary btn-sm">📦 Importa ZIP</button>
+        <input type="file" id="file-import-zip" accept=".zip" style="display:none">
+
+        <button id="btn-export-zip" class="btn btn-secondary btn-sm">📦 Esporta ZIP</button>
       </div>
 
       <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
@@ -227,6 +234,8 @@
 
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- JSZip -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <!-- Service Worker -->
   <script>
