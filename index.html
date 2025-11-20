@@ -13,6 +13,7 @@
 
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <header class="app-header">
     <h1>Ricette Lavorazione Cuscinetti</h1>
@@ -20,79 +21,197 @@
   </header>
 
   <main class="app-container">
-    <!-- (tutto il resto dell’HTML che avevamo prima, invariato) -->
 
-    <!-- Pannello elenco lavorazioni -->
+    <!-- ====================== -->
+    <!-- SEZIONE LISTA LAVORAZIONI -->
+    <!-- ====================== -->
     <section class="card card-list">
+
       <div class="card-header">
         <h2>Lavorazioni</h2>
-        <button id="btn-nuova" type="button" class="btn btn-primary">
-          ➕ Nuova
-        </button>
+        <button id="btn-nuova" type="button" class="btn btn-primary">➕ Nuova</button>
       </div>
 
+      <!-- Toolbar -->
       <div class="toolbar">
-        <button id="btn-import" type="button" class="btn btn-secondary btn-sm">
-          📥 Importa CSV
-        </button>
+        <button id="btn-import" type="button" class="btn btn-secondary btn-sm">📥 Importa CSV</button>
         <input type="file" id="file-import" accept=".csv" style="display:none" />
-        <button id="btn-export-csv" type="button" class="btn btn-secondary btn-sm">
-          📤 Esporta Excel (CSV)
-        </button>
-        <button id="btn-export-pdf" type="button" class="btn btn-secondary btn-sm">
-          📄 Esporta PDF
-        </button>
+
+        <button id="btn-export-csv" type="button" class="btn btn-secondary btn-sm">📤 Esporta CSV</button>
+
+        <button id="btn-export-pdf" type="button" class="btn btn-secondary btn-sm">📄 Esporta PDF</button>
       </div>
 
       <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
+
       <div class="card-footer">
-        <small>
-          I dati e le immagini sono salvati solo in questo dispositivo (localStorage).
-        </small>
+        <small>I dati e le immagini sono salvati solo in questo dispositivo (localStorage).</small>
       </div>
     </section>
 
-    <!-- Pannello dettaglio / form -->
+    <!-- ====================== -->
+    <!-- SEZIONE DETTAGLIO LAVORAZIONE -->
+    <!-- ====================== -->
     <section class="card card-form">
+
       <div class="card-header">
         <div>
           <h2>Dettaglio lavorazione</h2>
           <span id="stato-modifica" class="stato-modifica"></span>
         </div>
-        <button
-          id="btn-scheda-tecnica"
-          type="button"
-          class="btn btn-secondary btn-sm"
-          disabled
-        >
+
+        <button id="btn-scheda-tecnica" type="button" class="btn btn-secondary btn-sm" disabled>
           📘 Scheda tecnica
         </button>
       </div>
 
-      <!-- QUI resta tutto il tuo form + disegno come già ce l’hai ora -->
-      <!-- ... (non lo riscrivo tutto per brevità, ma tieni la versione funzionante attuale) ... -->
-      <!-- IMPORTANTE: non cancellare l’inclusione di script.js e jsPDF in fondo -->
+      <!-- FORM LAVORAZIONE -->
+      <form id="form-lavorazione" class="form-grid">
+
+        <div class="form-group full-width">
+          <label for="codice">Codice lavorazione *</label>
+          <input type="text" id="codice" required placeholder="Es. BB1-0654 A" />
+        </div>
+
+        <div class="form-group">
+          <label for="irTipo">IR - Tipo</label>
+          <input type="text" id="irTipo" placeholder="Es. BB1-0654" />
+        </div>
+
+        <div class="form-group">
+          <label for="orTipo">OR - Tipo</label>
+          <input type="text" id="orTipo" placeholder="Es. BB1-0654" />
+        </div>
+
+        <div class="form-group">
+          <label for="diametroSfera">Sfera - Diametro (mm)</label>
+          <input type="number" step="0.001" id="diametroSfera" placeholder="Es. 3.968" />
+        </div>
+
+        <div class="form-group">
+          <label for="numeroSfere">Sfera - Numero sfere (n)</label>
+          <input type="number" id="numeroSfere" placeholder="Es. 9" />
+        </div>
+
+        <div class="form-group">
+          <label for="gabbiaTipo">Gabbia - Tipo</label>
+          <input type="text" id="gabbiaTipo" placeholder="Es. CJ-6205 A-LS2P" />
+        </div>
+
+        <div class="form-group">
+          <label for="grassoTipo">Grasso - Tipo</label>
+          <input type="text" id="grassoTipo" placeholder="Es. GXN" />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="schermoTipo">Schermo / Tenuta - Tipo</label>
+          <input type="text" id="schermoTipo" placeholder="Es. 2RS1, LS2P, ecc." />
+        </div>
+
+        <div class="form-group">
+          <label for="pesoMin">Peso minimo (g)</label>
+          <input type="number" step="0.01" id="pesoMin" placeholder="Es. 1.18" />
+        </div>
+
+        <div class="form-group">
+          <label for="pesoMax">Peso massimo (g)</label>
+          <input type="number" step="0.01" id="pesoMax" placeholder="Es. 1.65" />
+        </div>
+
+        <div class="form-group">
+          <label for="classeGioco">Gioco radiale - Classe</label>
+          <select id="classeGioco">
+            <option value="">—</option>
+            <option value="C2">C2</option>
+            <option value="CN">CN</option>
+            <option value="C3">C3</option>
+            <option value="C4">C4</option>
+            <option value="C5">C5</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="giocoMin">Gioco min (µm)</label>
+          <input type="number" step="0.1" id="giocoMin" placeholder="34" />
+        </div>
+
+        <div class="form-group">
+          <label for="giocoMax">Gioco max (µm)</label>
+          <input type="number" step="0.1" id="giocoMax" placeholder="40" />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="disegnoUrl">URL disegno tecnico</label>
+          <input type="url" id="disegnoUrl" placeholder="Link immagine" />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="disegnoFile">Oppure carica immagine</label>
+          <input type="file" id="disegnoFile" accept="image/*" capture="environment" />
+        </div>
+
+        <div class="form-actions full-width">
+          <button type="submit" class="btn btn-primary">💾 Salva</button>
+          <button type="button" id="btn-reset" class="btn btn-secondary">🧹 Svuota</button>
+          <button type="button" id="btn-elimina" class="btn btn-danger" disabled>🗑️ Elimina</button>
+        </div>
+      </form>
+
+      <!-- PREVIEW DISEGNO -->
+      <div class="drawing-container full-width">
+        <h3>Disegno tecnico</h3>
+        <div id="drawing-placeholder" class="drawing-placeholder">Nessun disegno caricato</div>
+        <img id="drawing-image" class="drawing-image" src="" alt="Disegno tecnico" />
+      </div>
     </section>
   </main>
 
   <footer class="app-footer">
-    <small>App locale per gestione ricette di lavorazione cuscinetti · GitHub Pages</small>
+    <small>App locale per ricette lavorazione cuscinetti · GitHub Pages</small>
   </footer>
 
+  <!-- ====================== -->
+  <!-- MODALE SCHEDA TECNICA -->
+  <!-- ====================== -->
   <div id="scheda-modal" class="modal hidden">
-    <!-- ... tutta la modale scheda tecnica come nella versione attuale ... -->
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="scheda-codice"></h3>
+        <button id="scheda-close" class="modal-close">✖</button>
+      </div>
+
+      <div class="modal-body">
+        <p id="scheda-sub" class="scheda-sub"></p>
+
+        <div class="scheda-grid">
+          <div><strong>IR:</strong> <span id="scheda-ir"></span></div>
+          <div><strong>OR:</strong> <span id="scheda-or"></span></div>
+          <div><strong>Sfere:</strong> <span id="scheda-sfere"></span></div>
+          <div><strong>Gabbia:</strong> <span id="scheda-gabbia"></span></div>
+          <div><strong>Grasso:</strong> <span id="scheda-grasso"></span></div>
+          <div><strong>Schermo:</strong> <span id="scheda-schermo"></span></div>
+          <div><strong>Peso:</strong> <span id="scheda-peso"></span></div>
+          <div><strong>Gioco:</strong> <span id="scheda-gioco"></span></div>
+        </div>
+
+        <div class="scheda-disegno">
+          <div id="scheda-drawing-placeholder" class="drawing-placeholder">Nessuna immagine</div>
+          <img id="scheda-drawing-image" class="drawing-image" src="" />
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- jsPDF per export PDF -->
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Registrazione Service Worker PWA -->
+  <!-- Service Worker -->
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker
-          .register("service-worker.js")
-          .catch((err) => console.error("SW registration failed:", err));
+        navigator.serviceWorker.register("service-worker.js");
       });
     }
   </script>
