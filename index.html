@@ -40,17 +40,17 @@
         <!-- Identificazione -->
         <div class="form-group full-width">
           <label for="codice">Codice lavorazione *</label>
-          <input type="text" id="codice" required placeholder="Es. 16101-2RS1" />
+          <input type="text" id="codice" required placeholder="Es. BB1-0654 A" />
         </div>
 
         <!-- IR / OR -->
         <div class="form-group">
           <label for="irTipo">IR - Tipo</label>
-          <input type="text" id="irTipo" placeholder="Es. IR 16101 A" />
+          <input type="text" id="irTipo" placeholder="Es. BB1-0654" />
         </div>
         <div class="form-group">
           <label for="orTipo">OR - Tipo</label>
-          <input type="text" id="orTipo" placeholder="Es. OR 16101 B" />
+          <input type="text" id="orTipo" placeholder="Es. BB1-0654" />
         </div>
 
         <!-- Sfere -->
@@ -59,28 +59,38 @@
           <input type="number" step="0.001" id="diametroSfera" placeholder="Es. 3.968" />
         </div>
         <div class="form-group">
-          <label for="numeroSfere">Sfera - N° sfere</label>
-          <input type="number" id="numeroSfere" placeholder="Es. 13" min="0" />
+          <label for="numeroSfere">Sfera - Numero sfere (n)</label>
+          <input type="number" id="numeroSfere" placeholder="Es. 9" min="0" />
         </div>
 
         <!-- Gabbia / Grasso -->
         <div class="form-group">
           <label for="gabbiaTipo">Gabbia - Tipo</label>
-          <input type="text" id="gabbiaTipo" placeholder="Es. Gabbia acciaio" />
+          <input type="text" id="gabbiaTipo" placeholder="Es. CJ-6205 A-LS2P" />
         </div>
         <div class="form-group">
           <label for="grassoTipo">Grasso - Tipo</label>
-          <input type="text" id="grassoTipo" placeholder="Es. LGMT2" />
+          <input type="text" id="grassoTipo" placeholder="Es. GXN, LGMT2, ecc." />
+        </div>
+
+        <!-- Schermo / Tenuta -->
+        <div class="form-group full-width">
+          <label for="schermoTipo">Schermo / Tenuta - Tipo</label>
+          <input
+            type="text"
+            id="schermoTipo"
+            placeholder="Es. 2RS1, LS2P, schermato lato X, ecc."
+          />
         </div>
 
         <!-- Peso -->
         <div class="form-group">
           <label for="pesoMin">Peso minimo (g)</label>
-          <input type="number" step="0.01" id="pesoMin" placeholder="Es. 145.0" />
+          <input type="number" step="0.01" id="pesoMin" placeholder="Es. 1.18" />
         </div>
         <div class="form-group">
           <label for="pesoMax">Peso massimo (g)</label>
-          <input type="number" step="0.01" id="pesoMax" placeholder="Es. 155.0" />
+          <input type="number" step="0.01" id="pesoMax" placeholder="Es. 1.65" />
         </div>
 
         <!-- Gioco radiale -->
@@ -97,11 +107,21 @@
         </div>
         <div class="form-group">
           <label for="giocoMin">Gioco min (µm)</label>
-          <input type="number" step="0.1" id="giocoMin" placeholder="Es. 3.0" />
+          <input type="number" step="0.1" id="giocoMin" placeholder="Es. 34" />
         </div>
         <div class="form-group">
           <label for="giocoMax">Gioco max (µm)</label>
-          <input type="number" step="0.1" id="giocoMax" placeholder="Es. 18.0" />
+          <input type="number" step="0.1" id="giocoMax" placeholder="Es. 40" />
+        </div>
+
+        <!-- URL disegno tecnico -->
+        <div class="form-group full-width">
+          <label for="disegnoUrl">URL disegno tecnico (immagine)</label>
+          <input
+            type="url"
+            id="disegnoUrl"
+            placeholder="Incolla il link all'immagine del disegno tecnico"
+          />
         </div>
 
         <!-- Pulsanti -->
@@ -115,11 +135,20 @@
           </button>
         </div>
       </form>
+
+      <!-- Disegno tecnico -->
+      <div class="drawing-container full-width">
+        <h3>Disegno tecnico</h3>
+        <div id="drawing-placeholder" class="drawing-placeholder">
+          Nessun disegno associato a questa lavorazione.
+        </div>
+        <img id="drawing-image" class="drawing-image" src="" alt="Disegno tecnico" />
+      </div>
     </section>
   </main>
 
   <footer class="app-footer">
-    <small>App locale per gestione ricette di lavorazione cuscinetti · Marco / GitHub Pages</small>
+    <small>App locale per gestione ricette di lavorazione cuscinetti · GitHub Pages</small>
   </footer>
 
   <script src="script.js"></script>
