@@ -54,7 +54,7 @@ function aggiornaDisegnoPreview(url) {
 
 function aggiornaStatoSchedaButton() {
   const btn = document.getElementById("btn-scheda-tecnica");
-  btn.disabled = !idCorrente;
+  if (btn) btn.disabled = !idCorrente;
 }
 
 // ============================
@@ -83,8 +83,10 @@ function renderLista() {
       riga.classList.add("active");
     }
 
+    // ⬇️ CLIC sulla riga: carica i dati e APRE la scheda tecnica
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
+      apriSchedaTecnica();
     });
 
     const info = document.createElement("div");
@@ -298,19 +300,216 @@ function leggiFileDisegno(file) {
 }
 
 // ============================
-// Export CSV / Import CSV / Export PDF
-// (uguale alla versione precedente)
+// Export CSV
 // ============================
-/* ... per brevità, qui va tutto il codice di exportToCSV, importFromCSV, exportToPDF
-   che ti ho dato nel messaggio precedente: copialo identico, NON cambiare nulla.  */
+function escapeCSV(value) {
+  if (value == null) return "";
+  const str = String(value);
+  if (str.includes(";") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
-/* --- INCOLLA QUI da "function escapeCSV" fino alla fine delle funzioni export/import PDF
-   del file precedente (sono identiche) --- */
+function exportToCSV() {
+  if (lavorazioni.length === 0) {
+    alert("Nessuna lavorazione da esportare.");
+    return;
+  }
 
-/* Per non farti impazzire: puoi anche riusare direttamente il tuo script.js
-   precedente e solo AGGIUNGERE sotto le nuove funzioni di scheda tecnica
-   che metto qui sotto. Se preferisci, però, sostituisci l'intero file con
-   quello che avevi prima + queste funzioni aggiuntive. */
+  const headers = [
+    "codice",
+    "irTipo",
+    "orTipo",
+    "diametroSfera",
+    "numeroSfere",
+    "gabbiaTipo",
+    "grassoTipo",
+    "schermoTipo",
+    "pesoMin",
+    "pesoMax",
+    "classeGioco",
+    "giocoMin",
+    "giocoMax",
+    "disegnoPresente"
+  ];
+
+  const rows = lavorazioni.map((l) => [
+    l.codice || "",
+    l.irTipo || "",
+    l.orTipo || "",
+    l.diametroSfera ?? "",
+    l.numeroSfere ?? "",
+    l.gabbiaTipo || "",
+    l.grassoTipo || "",
+    l.schermoTipo || "",
+    l.pesoMin ?? "",
+    l.pesoMax ?? "",
+    l.classeGioco || "",
+    l.giocoMin ?? "",
+    l.giocoMax ?? "",
+    (l.disegnoData || l.disegnoUrl) ? "SI" : ""
+  ]);
+
+  let csv =
+    headers.map(escapeCSV).join(";") +
+    "\n" +
+    rows.map((r) => r.map(escapeCSV).join(";")).join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "lavorazioni_cuscinetti.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ============================
+// Import CSV
+// ============================
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length === 0) return [];
+
+  const sep = lines[0].includes(";") ? ";" : ",";
+  const header = lines[0].split(sep).map((h) => h.trim());
+
+  function idx(name) {
+    return header.indexOf(name);
+  }
+
+  const records = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(sep);
+    if (parts.length === 1 && parts[0].trim() === "") continue;
+
+    const get = (name) => {
+      const id = idx(name);
+      if (id === -1 || id >= parts.length) return "";
+      return parts[id].trim().replace(/^"|"$/g, "");
+    };
+
+    const rec = {
+      id: generaId(),
+      codice: get("codice"),
+      irTipo: get("irTipo"),
+      orTipo: get("orTipo"),
+      diametroSfera: toNumberOrNull(get("diametroSfera")),
+      numeroSfere: toNumberOrNull(get("numeroSfere")),
+      gabbiaTipo: get("gabbiaTipo"),
+      grassoTipo: get("grassoTipo"),
+      schermoTipo: get("schermoTipo"),
+      pesoMin: toNumberOrNull(get("pesoMin")),
+      pesoMax: toNumberOrNull(get("pesoMax")),
+      classeGioco: get("classeGioco"),
+      giocoMin: toNumberOrNull(get("giocoMin")),
+      giocoMax: toNumberOrNull(get("giocoMax")),
+      disegnoUrl: "",
+      disegnoData: ""
+    };
+
+    if (rec.codice) records.push(rec);
+  }
+
+  return records;
+}
+
+function toNumberOrNull(val) {
+  if (!val) return null;
+  const normalized = val.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isNaN(n) ? null : n;
+}
+
+function importFromCSV(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    const nuovi = parseCSV(text);
+    if (nuovi.length === 0) {
+      alert("Nessun dato valido trovato nel file.");
+      return;
+    }
+    if (
+      !confirm(
+        `Verranno aggiunte ${nuovi.length} lavorazioni a quelle esistenti. Continuare?`
+      )
+    ) {
+      return;
+    }
+    lavorazioni = lavorazioni.concat(nuovi);
+    salvaSuStorage();
+    resetForm();
+    renderLista();
+    alert("Importazione completata.");
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+// ============================
+// Export PDF
+// ============================
+function exportToPDF() {
+  if (lavorazioni.length === 0) {
+    alert("Nessuna lavorazione da esportare.");
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("Libreria PDF non disponibile.");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  let y = 12;
+  doc.setFontSize(14);
+  doc.text("Ricette lavorazione cuscinetti", 10, y);
+  y += 6;
+  doc.setFontSize(9);
+
+  lavorazioni.forEach((lav, index) => {
+    if (y > 270) {
+      doc.addPage();
+      y = 12;
+    }
+
+    doc.setFont(undefined, "bold");
+    doc.text(
+      `${index + 1}. ${lav.codice || "(senza codice)"}`,
+      10,
+      y
+    );
+    y += 4;
+
+    doc.setFont(undefined, "normal");
+    const line1 = `IR: ${lav.irTipo || "-"}   OR: ${lav.orTipo || "-"}   Sfere: Ø ${
+      lav.diametroSfera ?? "-"
+    }  n=${lav.numeroSfere ?? "-"}`;
+    doc.text(line1, 10, y);
+    y += 4;
+
+    const line2 = `Gabbia: ${lav.gabbiaTipo || "-"}   Grasso: ${
+      lav.grassoTipo || "-"
+    }   Schermo: ${lav.schermoTipo || "-"}`;
+    doc.text(line2, 10, y);
+    y += 4;
+
+    const line3 = `Peso: ${lav.pesoMin ?? "-"}–${lav.pesoMax ?? "-"} g   Gioco: ${
+      lav.classeGioco || "-"
+    } ${lav.giocoMin ?? "-"}–${lav.giocoMax ?? "-"} µm`;
+    doc.text(line3, 10, y);
+    y += 6;
+  });
+
+  doc.save("lavorazioni_cuscinetti.pdf");
+}
 
 // ============================
 // Scheda tecnica (modale)
@@ -403,7 +602,23 @@ document.addEventListener("DOMContentLoaded", () => {
     leggiFileDisegno(file);
   });
 
-  // IMPORT/EXPORT: lascia quelli che hai già (btn-export-csv, btn-export-pdf, btn-import)
+  // Import / Export
+  document
+    .getElementById("btn-export-csv")
+    .addEventListener("click", exportToCSV);
+  document
+    .getElementById("btn-export-pdf")
+    .addEventListener("click", exportToPDF);
+
+  const fileImport = document.getElementById("file-import");
+  document.getElementById("btn-import").addEventListener("click", () => {
+    fileImport.click();
+  });
+  fileImport.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importFromCSV(file);
+    fileImport.value = "";
+  });
 
   // Scheda tecnica
   document
