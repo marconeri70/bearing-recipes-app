@@ -57,12 +57,36 @@ function aggiornaStatoSchedaButton() {
   if (btn) btn.disabled = !idCorrente;
 }
 
+function mostraForm() {
+  const card = document.getElementById("card-form");
+  if (card) card.classList.remove("is-hidden");
+}
+
+function nascondiForm() {
+  const card = document.getElementById("card-form");
+  if (card) card.classList.add("is-hidden");
+}
+
 // ============================
 // Lista lavorazioni
 // ============================
+function aggiornaConteggio() {
+  const label = document.getElementById("conteggio-lavorazioni");
+  if (!label) return;
+  if (lavorazioni.length === 0) {
+    label.textContent = "Nessuna ricetta salvata";
+  } else if (lavorazioni.length === 1) {
+    label.textContent = "1 ricetta salvata";
+  } else {
+    label.textContent = `${lavorazioni.length} ricette salvate`;
+  }
+}
+
 function renderLista() {
   const container = document.getElementById("lista-lavorazioni");
   container.innerHTML = "";
+
+  aggiornaConteggio();
 
   if (lavorazioni.length === 0) {
     const vuoto = document.createElement("div");
@@ -70,7 +94,7 @@ function renderLista() {
     vuoto.style.cursor = "default";
     vuoto.innerHTML = `<div class="riga-lavorazione-info">
       <span class="riga-codice">Nessuna lavorazione salvata</span>
-      <span class="riga-sub">Premi "Nuova" per crearne una.</span>
+      <span class="riga-sub">Premi "Nuova" per creare una ricetta di lavorazione.</span>
     </div>`;
     container.appendChild(vuoto);
     return;
@@ -83,9 +107,9 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // clic: carica + apri scheda tecnica
+    // clic: seleziona e apre scheda tecnica (dashboard)
     riga.addEventListener("click", () => {
-      caricaLavorazioneInForm(lav.id);
+      caricaLavorazioneInForm(lav.id); // aggiorno dati correnti
       apriSchedaTecnica();
     });
 
@@ -165,7 +189,6 @@ function resetForm() {
 
   aggiornaDisegnoPreview("");
   aggiornaStatoSchedaButton();
-  renderLista();
 }
 
 function caricaLavorazioneInForm(id) {
@@ -246,8 +269,8 @@ function gestisciSubmit(event) {
 
   salvaSuStorage();
   idCorrente = lav.id;
-  caricaLavorazioneInForm(lav.id);
-  renderLista();
+  renderLista();        // aggiorna cruscotto
+  nascondiForm();       // chiudi il form dopo il salvataggio
 }
 
 function leggiNumero(id) {
@@ -271,7 +294,9 @@ function eliminaLavorazioneCorrente() {
 
   lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
   salvaSuStorage();
+  idCorrente = null;
   resetForm();
+  nascondiForm();
   renderLista();
 }
 
@@ -449,7 +474,6 @@ function importFromCSV(file) {
     }
     lavorazioni = lavorazioni.concat(nuovi);
     salvaSuStorage();
-    resetForm();
     renderLista();
     alert("Importazione completata.");
   };
@@ -575,11 +599,22 @@ document.addEventListener("DOMContentLoaded", () => {
   lavorazioni = caricaDaStorage();
   renderLista();
   resetForm();
+  nascondiForm(); // all'avvio solo cruscotto
 
   const form = document.getElementById("form-lavorazione");
   form.addEventListener("submit", gestisciSubmit);
 
-  document.getElementById("btn-nuova").addEventListener("click", resetForm);
+  document.getElementById("btn-nuova").addEventListener("click", () => {
+    resetForm();
+    mostraForm();
+    // scroll verso il form
+    const card = document.getElementById("card-form");
+    if (card) {
+      const top = card.getBoundingClientRect().top + window.scrollY - 70;
+      window.scrollTo({ top, behavior: "smooth" });
+    }
+  });
+
   document.getElementById("btn-reset").addEventListener("click", resetForm);
   document
     .getElementById("btn-elimina")
