@@ -23,7 +23,7 @@
   <main class="app-container">
 
     <!-- ====================== -->
-    <!-- SEZIONE LISTA LAVORAZIONI -->
+    <!-- LISTA LAVORAZIONI -->
     <!-- ====================== -->
     <section class="card card-list">
 
@@ -32,25 +32,24 @@
         <button id="btn-nuova" type="button" class="btn btn-primary">➕ Nuova</button>
       </div>
 
-      <!-- Toolbar -->
       <div class="toolbar">
-        <button id="btn-import" type="button" class="btn btn-secondary btn-sm">📥 Importa CSV</button>
-        <input type="file" id="file-import" accept=".csv" style="display:none" />
+        <button id="btn-import" class="btn btn-secondary btn-sm">📥 Importa CSV</button>
+        <input type="file" id="file-import" accept=".csv" style="display:none">
 
-        <button id="btn-export-csv" type="button" class="btn btn-secondary btn-sm">📤 Esporta CSV</button>
-
-        <button id="btn-export-pdf" type="button" class="btn btn-secondary btn-sm">📄 Esporta PDF</button>
+        <button id="btn-export-csv" class="btn btn-secondary btn-sm">📤 Esporta CSV</button>
+        <button id="btn-export-pdf" class="btn btn-secondary btn-sm">📄 Esporta PDF</button>
       </div>
 
       <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
 
       <div class="card-footer">
-        <small>I dati e le immagini sono salvati solo in questo dispositivo (localStorage).</small>
+        <small>Dati e immagini salvati solo sul dispositivo (localStorage).</small>
       </div>
+
     </section>
 
     <!-- ====================== -->
-    <!-- SEZIONE DETTAGLIO LAVORAZIONE -->
+    <!-- DETTAGLIO LAVORAZIONE -->
     <!-- ====================== -->
     <section class="card card-form">
 
@@ -60,62 +59,62 @@
           <span id="stato-modifica" class="stato-modifica"></span>
         </div>
 
-        <button id="btn-scheda-tecnica" type="button" class="btn btn-secondary btn-sm" disabled>
+        <button id="btn-scheda-tecnica" class="btn btn-secondary btn-sm" disabled>
           📘 Scheda tecnica
         </button>
       </div>
 
-      <!-- FORM LAVORAZIONE -->
+      <!-- FORM -->
       <form id="form-lavorazione" class="form-grid">
 
         <div class="form-group full-width">
           <label for="codice">Codice lavorazione *</label>
-          <input type="text" id="codice" required placeholder="Es. BB1-0654 A" />
+          <input id="codice" type="text" required placeholder="Es. BB1-0654 A">
         </div>
 
         <div class="form-group">
           <label for="irTipo">IR - Tipo</label>
-          <input type="text" id="irTipo" placeholder="Es. BB1-0654" />
+          <input id="irTipo" type="text" placeholder="Es. BB1-0654">
         </div>
 
         <div class="form-group">
           <label for="orTipo">OR - Tipo</label>
-          <input type="text" id="orTipo" placeholder="Es. BB1-0654" />
+          <input id="orTipo" type="text" placeholder="Es. BB1-0654">
         </div>
 
         <div class="form-group">
           <label for="diametroSfera">Sfera - Diametro (mm)</label>
-          <input type="number" step="0.001" id="diametroSfera" placeholder="Es. 3.968" />
+          <input id="diametroSfera" type="number" step="0.001" placeholder="Es. 3.968">
         </div>
 
         <div class="form-group">
-          <label for="numeroSfere">Sfera - Numero sfere (n)</label>
-          <input type="number" id="numeroSfere" placeholder="Es. 9" />
+          <label for="numeroSfere">Sfera - Numero sfere</label>
+          <input id="numeroSfere" type="number" placeholder="Es. 9">
         </div>
 
         <div class="form-group">
           <label for="gabbiaTipo">Gabbia - Tipo</label>
-          <input type="text" id="gabbiaTipo" placeholder="Es. CJ-6205 A-LS2P" />
+          <input id="gabbiaTipo" type="text" placeholder="Es. CJ-6205 A-LS2P">
         </div>
 
         <div class="form-group">
           <label for="grassoTipo">Grasso - Tipo</label>
-          <input type="text" id="grassoTipo" placeholder="Es. GXN" />
+          <input id="grassoTipo" type="text" placeholder="Es. GXN">
         </div>
 
         <div class="form-group full-width">
-          <label for="schermoTipo">Schermo / Tenuta - Tipo</label>
-          <input type="text" id="schermoTipo" placeholder="Es. 2RS1, LS2P, ecc." />
+          <label for="schermoTipo">Schermo / Tenuta</label>
+          <input id="schermoTipo" type="text" placeholder="Es. 2RS1, LS2P, ecc.">
         </div>
 
         <div class="form-group">
           <label for="pesoMin">Peso minimo (g)</label>
-          <input type="number" step="0.01" id="pesoMin" placeholder="Es. 1.18" />
+          <input id="pesoMin" type="number" step="0.01">
         </div>
 
         <div class="form-group">
           <label for="pesoMax">Peso massimo (g)</label>
-          <input type="number" step="0.01" id="pesoMax" placeholder="Es. 1.65" />
+          <input id="pesoMax" type="number" step="0.01">
         </div>
 
         <div class="form-group">
@@ -132,22 +131,33 @@
 
         <div class="form-group">
           <label for="giocoMin">Gioco min (µm)</label>
-          <input type="number" step="0.1" id="giocoMin" placeholder="34" />
+          <input id="giocoMin" type="number" step="0.1">
         </div>
 
         <div class="form-group">
           <label for="giocoMax">Gioco max (µm)</label>
-          <input type="number" step="0.1" id="giocoMax" placeholder="40" />
+          <input id="giocoMax" type="number" step="0.1">
         </div>
 
+        <!-- ====================== -->
+        <!-- CARICAMENTO IMMAGINI -->
+        <!-- ====================== -->
         <div class="form-group full-width">
-          <label for="disegnoUrl">URL disegno tecnico</label>
-          <input type="url" id="disegnoUrl" placeholder="Link immagine" />
-        </div>
+          <label>Carica disegno tecnico</label>
 
-        <div class="form-group full-width">
-          <label for="disegnoFile">Oppure carica immagine</label>
-          <input type="file" id="disegnoFile" accept="image/*" capture="environment" />
+          <!-- Galleria -->
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('file-galleria').click()">
+            📁 Scegli dalla galleria
+          </button>
+          <input type="file" id="file-galleria" accept="image/*" style="display:none">
+
+          <!-- Fotocamera -->
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('file-camera').click()">
+            📸 Scatta foto
+          </button>
+          <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
+
+          <input id="disegnoUrl" type="url" placeholder="URL immagine (opzionale)">
         </div>
 
         <div class="form-actions full-width">
@@ -155,19 +165,21 @@
           <button type="button" id="btn-reset" class="btn btn-secondary">🧹 Svuota</button>
           <button type="button" id="btn-elimina" class="btn btn-danger" disabled>🗑️ Elimina</button>
         </div>
+
       </form>
 
-      <!-- PREVIEW DISEGNO -->
+      <!-- PREVIEW IMMAGINE -->
       <div class="drawing-container full-width">
         <h3>Disegno tecnico</h3>
         <div id="drawing-placeholder" class="drawing-placeholder">Nessun disegno caricato</div>
-        <img id="drawing-image" class="drawing-image" src="" alt="Disegno tecnico" />
+        <img id="drawing-image" class="drawing-image" src="">
       </div>
+
     </section>
   </main>
 
   <footer class="app-footer">
-    <small>App locale per ricette lavorazione cuscinetti · GitHub Pages</small>
+    <small>App locale · GitHub Pages</small>
   </footer>
 
   <!-- ====================== -->
@@ -198,9 +210,11 @@
 
         <div class="scheda-disegno">
           <div id="scheda-drawing-placeholder" class="drawing-placeholder">Nessuna immagine</div>
-          <img id="scheda-drawing-image" class="drawing-image" src="" />
+          <img id="scheda-drawing-image" class="drawing-image" src="">
         </div>
+
       </div>
+
     </div>
   </div>
 
@@ -210,12 +224,11 @@
   <!-- Service Worker -->
   <script>
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js");
-      });
+      navigator.serviceWorker.register("service-worker.js");
     }
   </script>
 
   <script src="script.js"></script>
+
 </body>
 </html>
