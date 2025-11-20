@@ -1,3 +1,6 @@
+/* ... TUTTO COME NELLA VERSIONE PRECEDENTE CHE GIÀ FUNZIONA ... */
+/* (copia questo file intero sopra il vecchio) */
+
 *,
 *::before,
 *::after {
@@ -338,4 +341,127 @@ body {
   .toolbar {
     justify-content: flex-start;
   }
+}
+
+/* ===== MODALE SCHEDA TECNICA ===== */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.modal.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal:not(.hidden) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.modal-content {
+  position: relative;
+  max-width: 960px;
+  width: calc(100% - 1.5rem);
+  max-height: calc(100% - 2rem);
+  background: #0b1220;
+  border-radius: 1rem;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.7);
+  color: #e5e7eb;
+  padding: 0.9rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #1d4ed8;
+}
+
+.scheda-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.5);
+  padding-bottom: 0.4rem;
+}
+
+.scheda-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.scheda-sub {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.scheda-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.8rem;
+  padding-top: 0.6rem;
+  overflow: auto;
+}
+
+@media (max-width: 720px) {
+  .scheda-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scheda-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.info-label {
+  font-size: 0.8rem;
+  color: #a5b4fc;
+  font-weight: 600;
+}
+
+.info-value {
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.scheda-drawing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.scheda-drawing-image {
+  display: none;
+  max-width: 100%;
+  max-height: 430px;
+  border-radius: 0.6rem;
+  border: 1px solid #4b5563;
+  background: #020617;
+}
+
+#scheda-drawing-placeholder {
+  background: rgba(15, 23, 42, 0.75);
+  color: #9ca3af;
 }
