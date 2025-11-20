@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale (valori medi generali per classe)
+// Config gioco radiale (valori generali per classe)
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -16,7 +16,6 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!base) return null;
 
   // Per ora ignoriamo il diametro: usiamo i range generali della classe.
-  // Quando avremo i dati completi SKF, qui si leggerà la riga corretta in base a "diametro".
   return { min: base.min, max: base.max };
 }
 
@@ -79,7 +78,7 @@ function nascondiForm() {
 }
 
 // ============================
-// Lista lavorazioni
+// Lista lavorazioni (cruscotto)
 // ============================
 function aggiornaConteggio() {
   const label = document.getElementById("conteggio-lavorazioni");
@@ -118,10 +117,15 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // clic: seleziona e apre scheda tecnica (dashboard)
+    // clic: seleziona e APRE IL FORM MODIFICABILE (non più direttamente la scheda tecnica)
     riga.addEventListener("click", () => {
-      caricaLavorazioneInForm(lav.id); // aggiorno dati correnti
-      apriSchedaTecnica();
+      caricaLavorazioneInForm(lav.id);
+      mostraForm();
+      const card = document.getElementById("card-form");
+      if (card) {
+        const top = card.getBoundingClientRect().top + window.scrollY - 70;
+        window.scrollTo({ top, behavior: "smooth" });
+      }
     });
 
     const info = document.createElement("div");
@@ -499,7 +503,7 @@ function importFromCSV(file) {
     lavorazioni = lavorazioni.concat(nuovi);
     salvaSuStorage();
     renderLista();
-    alert("Importazione completata.");
+    alert("Importazione CSV completata.");
   };
   reader.readAsText(file, "utf-8");
 }
@@ -564,6 +568,105 @@ function exportToPDF() {
   });
 
   doc.save("lavorazioni_cuscinetti.pdf");
+}
+
+// ============================
+// Export ZIP (dati + immagini)
+// ============================
+async function exportZIP() {
+  if (lavorazioni.length === 0) {
+    alert("Nessuna lavorazione da esportare.");
+    return;
+  }
+  if (typeof JSZip === "undefined") {
+    alert("Libreria ZIP non disponibile.");
+    return;
+  }
+
+  const zip = new JSZip();
+
+  // Salviamo tutti i dati (compresa disegnoData) in JSON
+  const dataStr = JSON.stringify(lavorazioni, null, 2);
+  zip.file("data.json", dataStr);
+
+  // Esportiamo anche le immagini in una cartella /disegni
+  const imgFolder = zip.folder("disegni");
+
+  lavorazioni.forEach((lav) => {
+    if (!lav.disegnoData) return;
+
+    const dataUrl = lav.disegnoData;
+    const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.\-]+);base64,(.+)$/);
+    if (!match) return;
+
+    const mime = match[1];
+    const base64 = match[2];
+
+    let ext = "png";
+    if (mime === "image/jpeg" || mime === "image/jpg") ext = "jpg";
+    else if (mime === "image/webp") ext = "webp";
+
+    const filename = (lav.id || generaId()) + "." + ext;
+    imgFolder.file(filename, base64, { base64: true });
+  });
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "lavorazioni_export.zip";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+// ============================
+// Import ZIP (dati + immagini)
+// ============================
+async function importZIP(file) {
+  if (!file) return;
+  if (typeof JSZip === "undefined") {
+    alert("Libreria ZIP non disponibile.");
+    return;
+  }
+
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const dataFile = zip.file("data.json");
+    if (!dataFile) {
+      alert("File ZIP non valido: manca data.json");
+      return;
+    }
+
+    const jsonText = await dataFile.async("string");
+    let nuovi = JSON.parse(jsonText);
+    if (!Array.isArray(nuovi)) {
+      alert("Formato data.json non valido.");
+      return;
+    }
+
+    // assicuriamoci che ogni record abbia un id
+    nuovi = nuovi.map((lav) => {
+      if (!lav.id) lav.id = generaId();
+      return lav;
+    });
+
+    if (
+      !confirm(
+        `Verranno aggiunte ${nuovi.length} lavorazioni a quelle esistenti. Continuare?`
+      )
+    ) {
+      return;
+    }
+
+    lavorazioni = lavorazioni.concat(nuovi);
+    salvaSuStorage();
+    renderLista();
+    alert("Import ZIP completato.");
+  } catch (e) {
+    console.error(e);
+    alert("Errore durante l'import ZIP.");
+  }
 }
 
 // ============================
@@ -651,7 +754,7 @@ document.addEventListener("DOMContentLoaded", () => {
     .getElementById("btn-elimina")
     .addEventListener("click", eliminaLavorazioneCorrente);
 
-  // quando cambia classe o diametro IR → aggiorna gioco min/max
+  // classe o diametro IR → aggiorna gioco min/max
   document
     .getElementById("classeGioco")
     .addEventListener("change", aggiornaGiocoDaClasseEDiametro);
@@ -679,7 +782,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (file) leggiFileDisegno(file);
   });
 
-  // Import / Export
+  // Import / Export CSV/PDF
   document
     .getElementById("btn-export-csv")
     .addEventListener("click", exportToCSV);
@@ -697,7 +800,23 @@ document.addEventListener("DOMContentLoaded", () => {
     fileImport.value = "";
   });
 
-  // Scheda tecnica
+  // Export ZIP
+  document
+    .getElementById("btn-export-zip")
+    .addEventListener("click", exportZIP);
+
+  // Import ZIP
+  const fileImportZip = document.getElementById("file-import-zip");
+  document.getElementById("btn-import-zip").addEventListener("click", () => {
+    fileImportZip.click();
+  });
+  fileImportZip.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importZIP(file);
+    fileImportZip.value = "";
+  });
+
+  // Scheda tecnica (tasto dedicato)
   document
     .getElementById("btn-scheda-tecnica")
     .addEventListener("click", apriSchedaTecnica);
