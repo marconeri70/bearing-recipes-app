@@ -49,8 +49,18 @@
     <!-- Pannello dettaglio / form -->
     <section class="card card-form">
       <div class="card-header">
-        <h2>Dettaglio lavorazione</h2>
-        <span id="stato-modifica" class="stato-modifica"></span>
+        <div>
+          <h2>Dettaglio lavorazione</h2>
+          <span id="stato-modifica" class="stato-modifica"></span>
+        </div>
+        <button
+          id="btn-scheda-tecnica"
+          type="button"
+          class="btn btn-secondary btn-sm"
+          disabled
+        >
+          📘 Scheda tecnica
+        </button>
       </div>
 
       <form id="form-lavorazione" class="form-grid">
@@ -182,6 +192,71 @@
   <footer class="app-footer">
     <small>App locale per gestione ricette di lavorazione cuscinetti · GitHub Pages</small>
   </footer>
+
+  <!-- MODALE SCHEDA TECNICA -->
+  <div id="scheda-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <header class="scheda-header">
+        <div>
+          <h2 id="scheda-codice">CODICE</h2>
+          <p id="scheda-sub" class="scheda-sub"></p>
+        </div>
+        <button id="scheda-close" type="button" class="btn btn-secondary btn-sm">
+          ✖ Chiudi
+        </button>
+      </header>
+
+      <section class="scheda-body">
+        <div class="scheda-info">
+          <div class="info-row">
+            <span class="info-label">IR</span>
+            <span id="scheda-ir" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">OR</span>
+            <span id="scheda-or" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Sfere</span>
+            <span id="scheda-sfere" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Gabbia</span>
+            <span id="scheda-gabbia" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Grasso</span>
+            <span id="scheda-grasso" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Schermo</span>
+            <span id="scheda-schermo" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Peso</span>
+            <span id="scheda-peso" class="info-value"></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Gioco</span>
+            <span id="scheda-gioco" class="info-value"></span>
+          </div>
+        </div>
+
+        <div class="scheda-drawing">
+          <div id="scheda-drawing-placeholder" class="drawing-placeholder">
+            Nessun disegno associato.
+          </div>
+          <img
+            id="scheda-drawing-image"
+            class="scheda-drawing-image"
+            src=""
+            alt="Disegno tecnico"
+          />
+        </div>
+      </section>
+    </div>
+  </div>
 
   <!-- jsPDF per export PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
