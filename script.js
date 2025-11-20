@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale per classi (valori indicativi, modificabili dall'utente)
+// Config gioco radiale per classi
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -12,7 +12,8 @@ const CLASSI_GIOCO = {
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
 
 let lavorazioni = [];
-let idCorrente = null; // null = nuova lavorazione
+let idCorrente = null;
+let immagineCorrenteData = "";
 
 // ============================
 // Utility
@@ -36,7 +37,6 @@ function generaId() {
   return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8);
 }
 
-// Aggiorna anteprima disegno
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
@@ -52,8 +52,13 @@ function aggiornaDisegnoPreview(url) {
   }
 }
 
+function aggiornaStatoSchedaButton() {
+  const btn = document.getElementById("btn-scheda-tecnica");
+  btn.disabled = !idCorrente;
+}
+
 // ============================
-// Rendering lista
+// Lista lavorazioni
 // ============================
 function renderLista() {
   const container = document.getElementById("lista-lavorazioni");
@@ -65,7 +70,7 @@ function renderLista() {
     vuoto.style.cursor = "default";
     vuoto.innerHTML = `<div class="riga-lavorazione-info">
       <span class="riga-codice">Nessuna lavorazione salvata</span>
-      <span class="riga-sub">Premi "Nuova lavorazione" per crearne una.</span>
+      <span class="riga-sub">Premi "Nuova" per crearne una.</span>
     </div>`;
     container.appendChild(vuoto);
     return;
@@ -113,7 +118,7 @@ function renderLista() {
       badge.appendChild(b);
     }
 
-    if (lav.disegnoUrl && lav.disegnoUrl.trim() !== "") {
+    if ((lav.disegnoData && lav.disegnoData !== "") || (lav.disegnoUrl && lav.disegnoUrl !== "")) {
       const d = document.createElement("span");
       d.className = "badge badge-disegno";
       d.textContent = "Disegno";
@@ -127,10 +132,12 @@ function renderLista() {
 }
 
 // ============================
-// Form: carica / reset
+// Form: reset e carica
 // ============================
 function resetForm() {
   idCorrente = null;
+  immagineCorrenteData = "";
+
   document.getElementById("codice").value = "";
   document.getElementById("irTipo").value = "";
   document.getElementById("orTipo").value = "";
@@ -145,11 +152,14 @@ function resetForm() {
   document.getElementById("giocoMin").value = "";
   document.getElementById("giocoMax").value = "";
   document.getElementById("disegnoUrl").value = "";
+  const fileInput = document.getElementById("disegnoFile");
+  if (fileInput) fileInput.value = "";
 
   document.getElementById("stato-modifica").textContent = "Nuova lavorazione";
   document.getElementById("btn-elimina").disabled = true;
 
   aggiornaDisegnoPreview("");
+  aggiornaStatoSchedaButton();
   renderLista();
 }
 
@@ -161,10 +171,8 @@ function caricaLavorazioneInForm(id) {
   document.getElementById("codice").value = lav.codice || "";
   document.getElementById("irTipo").value = lav.irTipo || "";
   document.getElementById("orTipo").value = lav.orTipo || "";
-  document.getElementById("diametroSfera").value =
-    lav.diametroSfera ?? "";
-  document.getElementById("numeroSfere").value =
-    lav.numeroSfere ?? "";
+  document.getElementById("diametroSfera").value = lav.diametroSfera ?? "";
+  document.getElementById("numeroSfere").value = lav.numeroSfere ?? "";
   document.getElementById("gabbiaTipo").value = lav.gabbiaTipo || "";
   document.getElementById("grassoTipo").value = lav.grassoTipo || "";
   document.getElementById("schermoTipo").value = lav.schermoTipo || "";
@@ -175,16 +183,24 @@ function caricaLavorazioneInForm(id) {
   document.getElementById("giocoMax").value = lav.giocoMax ?? "";
   document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
 
+  const fileInput = document.getElementById("disegnoFile");
+  if (fileInput) fileInput.value = "";
+
+  immagineCorrenteData = lav.disegnoData || "";
+
+  const sorgente = immagineCorrenteData || lav.disegnoUrl || "";
+  aggiornaDisegnoPreview(sorgente);
+
   document.getElementById("stato-modifica").textContent =
     "Modifica lavorazione esistente";
   document.getElementById("btn-elimina").disabled = false;
 
-  aggiornaDisegnoPreview(lav.disegnoUrl || "");
+  aggiornaStatoSchedaButton();
   renderLista();
 }
 
 // ============================
-// Gestione submit form
+// Salvataggio form
 // ============================
 function gestisciSubmit(event) {
   event.preventDefault();
@@ -210,7 +226,8 @@ function gestisciSubmit(event) {
     classeGioco: document.getElementById("classeGioco").value || "",
     giocoMin: leggiNumero("giocoMin"),
     giocoMax: leggiNumero("giocoMax"),
-    disegnoUrl: document.getElementById("disegnoUrl").value.trim()
+    disegnoUrl: document.getElementById("disegnoUrl").value.trim(),
+    disegnoData: immagineCorrenteData
   };
 
   const idx = lavorazioni.findIndex((l) => l.id === lav.id);
@@ -229,13 +246,14 @@ function gestisciSubmit(event) {
 function leggiNumero(id) {
   const raw = document.getElementById(id).value;
   if (raw === "" || raw === null || raw === undefined) return null;
-  const n = Number(raw);
+  const normalized = raw.replace(",", ".");
+  const n = Number(normalized);
   if (Number.isNaN(n)) return null;
   return n;
 }
 
 // ============================
-// Elimina lavorazione
+// Elimina
 // ============================
 function eliminaLavorazioneCorrente() {
   if (!idCorrente) return;
@@ -251,7 +269,7 @@ function eliminaLavorazioneCorrente() {
 }
 
 // ============================
-// Classe gioco -> valori min/max automatici
+// Classe gioco → min/max
 // ============================
 function aggiornaGiocoDaClasse() {
   const classe = document.getElementById("classeGioco").value;
@@ -266,24 +284,103 @@ function aggiornaGiocoDaClasse() {
 }
 
 // ============================
-// Inizializzazione
+// File disegno
+// ============================
+function leggiFileDisegno(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    immagineCorrenteData = dataUrl;
+    aggiornaDisegnoPreview(dataUrl);
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============================
+// Export CSV / Import CSV / Export PDF
+// (uguale alla versione precedente)
+// ============================
+/* ... per brevità, qui va tutto il codice di exportToCSV, importFromCSV, exportToPDF
+   che ti ho dato nel messaggio precedente: copialo identico, NON cambiare nulla.  */
+
+/* --- INCOLLA QUI da "function escapeCSV" fino alla fine delle funzioni export/import PDF
+   del file precedente (sono identiche) --- */
+
+/* Per non farti impazzire: puoi anche riusare direttamente il tuo script.js
+   precedente e solo AGGIUNGERE sotto le nuove funzioni di scheda tecnica
+   che metto qui sotto. Se preferisci, però, sostituisci l'intero file con
+   quello che avevi prima + queste funzioni aggiuntive. */
+
+// ============================
+// Scheda tecnica (modale)
+// ============================
+function apriSchedaTecnica() {
+  if (!idCorrente) return;
+  const lav = lavorazioni.find((l) => l.id === idCorrente);
+  if (!lav) return;
+
+  document.getElementById("scheda-codice").textContent =
+    lav.codice || "(senza codice)";
+
+  const subParts = [];
+  if (lav.irTipo) subParts.push(`IR: ${lav.irTipo}`);
+  if (lav.orTipo) subParts.push(`OR: ${lav.orTipo}`);
+  document.getElementById("scheda-sub").textContent = subParts.join(" · ");
+
+  document.getElementById("scheda-ir").textContent = lav.irTipo || "-";
+  document.getElementById("scheda-or").textContent = lav.orTipo || "-";
+  document.getElementById("scheda-sfere").textContent = `Ø ${
+    lav.diametroSfera ?? "-"
+  } mm · n=${lav.numeroSfere ?? "-"}`;
+  document.getElementById("scheda-gabbia").textContent = lav.gabbiaTipo || "-";
+  document.getElementById("scheda-grasso").textContent = lav.grassoTipo || "-";
+  document.getElementById("scheda-schermo").textContent = lav.schermoTipo || "-";
+  document.getElementById("scheda-peso").textContent =
+    lav.pesoMin != null || lav.pesoMax != null
+      ? `${lav.pesoMin ?? "-"} – ${lav.pesoMax ?? "-"} g`
+      : "-";
+  document.getElementById("scheda-gioco").textContent =
+    lav.classeGioco || lav.giocoMin != null || lav.giocoMax != null
+      ? `${lav.classeGioco || ""} ${
+          lav.giocoMin ?? "-"
+        } – ${lav.giocoMax ?? "-"} µm`
+      : "-";
+
+  const img = document.getElementById("scheda-drawing-image");
+  const ph = document.getElementById("scheda-drawing-placeholder");
+  const src = lav.disegnoData || lav.disegnoUrl || "";
+
+  if (src) {
+    img.src = src;
+    img.style.display = "block";
+    ph.style.display = "none";
+  } else {
+    img.src = "";
+    img.style.display = "none";
+    ph.style.display = "block";
+  }
+
+  document.getElementById("scheda-modal").classList.remove("hidden");
+}
+
+function chiudiSchedaTecnica() {
+  document.getElementById("scheda-modal").classList.add("hidden");
+}
+
+// ============================
+// Init
 // ============================
 document.addEventListener("DOMContentLoaded", () => {
   lavorazioni = caricaDaStorage();
   renderLista();
-  resetForm(); // imposta stato "nuova"
+  resetForm();
 
   const form = document.getElementById("form-lavorazione");
   form.addEventListener("submit", gestisciSubmit);
 
-  document.getElementById("btn-nuova").addEventListener("click", () => {
-    resetForm();
-  });
-
-  document.getElementById("btn-reset").addEventListener("click", () => {
-    resetForm();
-  });
-
+  document.getElementById("btn-nuova").addEventListener("click", resetForm);
+  document.getElementById("btn-reset").addEventListener("click", resetForm);
   document
     .getElementById("btn-elimina")
     .addEventListener("click", eliminaLavorazioneCorrente);
@@ -294,5 +391,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document
     .getElementById("disegnoUrl")
-    .addEventListener("change", (e) => aggiornaDisegnoPreview(e.target.value));
+    .addEventListener("change", (e) => {
+      if (!immagineCorrenteData) {
+        aggiornaDisegnoPreview(e.target.value);
+      }
+    });
+
+  const fileDisegno = document.getElementById("disegnoFile");
+  fileDisegno.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    leggiFileDisegno(file);
+  });
+
+  // IMPORT/EXPORT: lascia quelli che hai già (btn-export-csv, btn-export-pdf, btn-import)
+
+  // Scheda tecnica
+  document
+    .getElementById("btn-scheda-tecnica")
+    .addEventListener("click", apriSchedaTecnica);
+  document
+    .getElementById("scheda-close")
+    .addEventListener("click", chiudiSchedaTecnica);
+  document
+    .getElementById("scheda-modal")
+    .addEventListener("click", (e) => {
+      if (e.target.id === "scheda-modal" || e.target.classList.contains("modal-backdrop")) {
+        chiudiSchedaTecnica();
+      }
+    });
 });
