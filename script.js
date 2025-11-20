@@ -36,6 +36,22 @@ function generaId() {
   return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8);
 }
 
+// Aggiorna anteprima disegno
+function aggiornaDisegnoPreview(url) {
+  const img = document.getElementById("drawing-image");
+  const placeholder = document.getElementById("drawing-placeholder");
+
+  if (url && url.trim() !== "") {
+    img.src = url.trim();
+    img.style.display = "block";
+    placeholder.style.display = "none";
+  } else {
+    img.src = "";
+    img.style.display = "none";
+    placeholder.style.display = "block";
+  }
+}
+
 // ============================
 // Rendering lista
 // ============================
@@ -97,6 +113,13 @@ function renderLista() {
       badge.appendChild(b);
     }
 
+    if (lav.disegnoUrl && lav.disegnoUrl.trim() !== "") {
+      const d = document.createElement("span");
+      d.className = "badge badge-disegno";
+      d.textContent = "Disegno";
+      badge.appendChild(d);
+    }
+
     riga.appendChild(info);
     riga.appendChild(badge);
     container.appendChild(riga);
@@ -115,15 +138,18 @@ function resetForm() {
   document.getElementById("numeroSfere").value = "";
   document.getElementById("gabbiaTipo").value = "";
   document.getElementById("grassoTipo").value = "";
+  document.getElementById("schermoTipo").value = "";
   document.getElementById("pesoMin").value = "";
   document.getElementById("pesoMax").value = "";
   document.getElementById("classeGioco").value = "";
   document.getElementById("giocoMin").value = "";
   document.getElementById("giocoMax").value = "";
+  document.getElementById("disegnoUrl").value = "";
 
   document.getElementById("stato-modifica").textContent = "Nuova lavorazione";
   document.getElementById("btn-elimina").disabled = true;
 
+  aggiornaDisegnoPreview("");
   renderLista();
 }
 
@@ -135,20 +161,25 @@ function caricaLavorazioneInForm(id) {
   document.getElementById("codice").value = lav.codice || "";
   document.getElementById("irTipo").value = lav.irTipo || "";
   document.getElementById("orTipo").value = lav.orTipo || "";
-  document.getElementById("diametroSfera").value = lav.diametroSfera ?? "";
-  document.getElementById("numeroSfere").value = lav.numeroSfere ?? "";
+  document.getElementById("diametroSfera").value =
+    lav.diametroSfera ?? "";
+  document.getElementById("numeroSfere").value =
+    lav.numeroSfere ?? "";
   document.getElementById("gabbiaTipo").value = lav.gabbiaTipo || "";
   document.getElementById("grassoTipo").value = lav.grassoTipo || "";
+  document.getElementById("schermoTipo").value = lav.schermoTipo || "";
   document.getElementById("pesoMin").value = lav.pesoMin ?? "";
   document.getElementById("pesoMax").value = lav.pesoMax ?? "";
   document.getElementById("classeGioco").value = lav.classeGioco || "";
   document.getElementById("giocoMin").value = lav.giocoMin ?? "";
   document.getElementById("giocoMax").value = lav.giocoMax ?? "";
+  document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
 
   document.getElementById("stato-modifica").textContent =
     "Modifica lavorazione esistente";
   document.getElementById("btn-elimina").disabled = false;
 
+  aggiornaDisegnoPreview(lav.disegnoUrl || "");
   renderLista();
 }
 
@@ -173,11 +204,13 @@ function gestisciSubmit(event) {
     numeroSfere: leggiNumero("numeroSfere"),
     gabbiaTipo: document.getElementById("gabbiaTipo").value.trim(),
     grassoTipo: document.getElementById("grassoTipo").value.trim(),
+    schermoTipo: document.getElementById("schermoTipo").value.trim(),
     pesoMin: leggiNumero("pesoMin"),
     pesoMax: leggiNumero("pesoMax"),
     classeGioco: document.getElementById("classeGioco").value || "",
     giocoMin: leggiNumero("giocoMin"),
-    giocoMax: leggiNumero("giocoMax")
+    giocoMax: leggiNumero("giocoMax"),
+    disegnoUrl: document.getElementById("disegnoUrl").value.trim()
   };
 
   const idx = lavorazioni.findIndex((l) => l.id === lav.id);
@@ -258,4 +291,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("classeGioco")
     .addEventListener("change", aggiornaGiocoDaClasse);
+
+  document
+    .getElementById("disegnoUrl")
+    .addEventListener("change", (e) => aggiornaDisegnoPreview(e.target.value));
 });
