@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale
+// Config gioco radiale (valori medi generali per classe)
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -8,6 +8,17 @@ const CLASSI_GIOCO = {
   C4: { min: 23, max: 43 },
   C5: { min: 36, max: 61 }
 };
+
+// In futuro qui potremo usare una tabella dettagliata SKF in funzione di diametro foro IR
+function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
+  if (!classe) return null;
+  const base = CLASSI_GIOCO[classe];
+  if (!base) return null;
+
+  // Per ora ignoriamo il diametro: usiamo i range generali della classe.
+  // Quando avremo i dati completi SKF, qui si leggerà la riga corretta in base a "diametro".
+  return { min: base.min, max: base.max };
+}
 
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
 
@@ -127,7 +138,9 @@ function renderLista() {
       lav.classeGioco && lav.giocoMin != null && lav.giocoMax != null
         ? `Gioco ${lav.classeGioco}: ${lav.giocoMin}–${lav.giocoMax} µm`
         : "";
-    sub.textContent = irOr ? `${irOr}${giocoTxt ? " · " + giocoTxt : ""}` : giocoTxt;
+    const foroTxt = lav.irDiametro != null ? `d=${lav.irDiametro} mm` : "";
+    const parts = [irOr, foroTxt, giocoTxt].filter(Boolean);
+    sub.textContent = parts.join(" · ");
 
     info.appendChild(codice);
     info.appendChild(sub);
@@ -166,6 +179,7 @@ function resetForm() {
 
   document.getElementById("codice").value = "";
   document.getElementById("irTipo").value = "";
+  document.getElementById("irDiametro").value = "";
   document.getElementById("orTipo").value = "";
   document.getElementById("diametroSfera").value = "";
   document.getElementById("numeroSfere").value = "";
@@ -198,6 +212,7 @@ function caricaLavorazioneInForm(id) {
   idCorrente = id;
   document.getElementById("codice").value = lav.codice || "";
   document.getElementById("irTipo").value = lav.irTipo || "";
+  document.getElementById("irDiametro").value = lav.irDiametro ?? "";
   document.getElementById("orTipo").value = lav.orTipo || "";
   document.getElementById("diametroSfera").value = lav.diametroSfera ?? "";
   document.getElementById("numeroSfere").value = lav.numeroSfere ?? "";
@@ -245,6 +260,7 @@ function gestisciSubmit(event) {
     id: idCorrente || generaId(),
     codice,
     irTipo: document.getElementById("irTipo").value.trim(),
+    irDiametro: leggiNumero("irDiametro"),
     orTipo: document.getElementById("orTipo").value.trim(),
     diametroSfera: leggiNumero("diametroSfera"),
     numeroSfere: leggiNumero("numeroSfere"),
@@ -301,18 +317,23 @@ function eliminaLavorazioneCorrente() {
 }
 
 // ============================
-// Classe gioco → min/max
+// Classe gioco + diametro → min/max
 // ============================
-function aggiornaGiocoDaClasse() {
+function aggiornaGiocoDaClasseEDiametro() {
   const classe = document.getElementById("classeGioco").value;
+  const diametro = leggiNumero("irDiametro");
+
+  if (!classe) return;
+
+  const result = trovaGiocoRadialeDaClasseEDiametro(classe, diametro);
+  if (!result) return;
+
   const campoMin = document.getElementById("giocoMin");
   const campoMax = document.getElementById("giocoMax");
-
-  if (!classe || !CLASSI_GIOCO[classe]) return;
-
-  const { min, max } = CLASSI_GIOCO[classe];
-  campoMin.value = min;
-  campoMax.value = max;
+  if (campoMin.value === "" || campoMax.value === "") {
+    campoMin.value = result.min;
+    campoMax.value = result.max;
+  }
 }
 
 // ============================
@@ -350,6 +371,7 @@ function exportToCSV() {
   const headers = [
     "codice",
     "irTipo",
+    "irDiametro",
     "orTipo",
     "diametroSfera",
     "numeroSfere",
@@ -367,6 +389,7 @@ function exportToCSV() {
   const rows = lavorazioni.map((l) => [
     l.codice || "",
     l.irTipo || "",
+    l.irDiametro ?? "",
     l.orTipo || "",
     l.diametroSfera ?? "",
     l.numeroSfere ?? "",
@@ -427,6 +450,7 @@ function parseCSV(text) {
       id: generaId(),
       codice: get("codice"),
       irTipo: get("irTipo"),
+      irDiametro: toNumberOrNull(get("irDiametro")),
       orTipo: get("orTipo"),
       diametroSfera: toNumberOrNull(get("diametroSfera")),
       numeroSfere: toNumberOrNull(get("numeroSfere")),
@@ -514,22 +538,28 @@ function exportToPDF() {
     y += 4;
 
     doc.setFont(undefined, "normal");
-    const line1 = `IR: ${lav.irTipo || "-"}   OR: ${lav.orTipo || "-"}   Sfere: Ø ${
-      lav.diametroSfera ?? "-"
-    }  n=${lav.numeroSfere ?? "-"}`;
+    const line1 = `IR: ${lav.irTipo || "-"} (d=${lav.irDiametro ?? "-"} mm)   OR: ${
+      lav.orTipo || "-"
+    }`;
     doc.text(line1, 10, y);
     y += 4;
 
-    const line2 = `Gabbia: ${lav.gabbiaTipo || "-"}   Grasso: ${
-      lav.grassoTipo || "-"
-    }   Schermo: ${lav.schermoTipo || "-"}`;
+    const line2 = `Sfere: Ø ${lav.diametroSfera ?? "-"}  n=${lav.numeroSfere ?? "-"}   Gabbia: ${
+      lav.gabbiaTipo || "-"
+    }`;
     doc.text(line2, 10, y);
     y += 4;
 
-    const line3 = `Peso: ${lav.pesoMin ?? "-"}–${lav.pesoMax ?? "-"} g   Gioco: ${
+    const line3 = `Grasso: ${lav.grassoTipo || "-"}   Schermo: ${
+      lav.schermoTipo || "-"
+    }`;
+    doc.text(line3, 10, y);
+    y += 4;
+
+    const line4 = `Peso: ${lav.pesoMin ?? "-"}–${lav.pesoMax ?? "-"} g   Gioco: ${
       lav.classeGioco || "-"
     } ${lav.giocoMin ?? "-"}–${lav.giocoMax ?? "-"} µm`;
-    doc.text(line3, 10, y);
+    doc.text(line4, 10, y);
     y += 6;
   });
 
@@ -554,6 +584,8 @@ function apriSchedaTecnica() {
 
   document.getElementById("scheda-ir").textContent = lav.irTipo || "-";
   document.getElementById("scheda-or").textContent = lav.orTipo || "-";
+  document.getElementById("scheda-ir-diametro").textContent =
+    lav.irDiametro != null ? `${lav.irDiametro} mm` : "-";
   document.getElementById("scheda-sfere").textContent = `Ø ${
     lav.diametroSfera ?? "-"
   } mm · n=${lav.numeroSfere ?? "-"}`;
@@ -607,7 +639,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-nuova").addEventListener("click", () => {
     resetForm();
     mostraForm();
-    // scroll verso il form
     const card = document.getElementById("card-form");
     if (card) {
       const top = card.getBoundingClientRect().top + window.scrollY - 70;
@@ -620,9 +651,13 @@ document.addEventListener("DOMContentLoaded", () => {
     .getElementById("btn-elimina")
     .addEventListener("click", eliminaLavorazioneCorrente);
 
+  // quando cambia classe o diametro IR → aggiorna gioco min/max
   document
     .getElementById("classeGioco")
-    .addEventListener("change", aggiornaGiocoDaClasse);
+    .addEventListener("change", aggiornaGiocoDaClasseEDiametro);
+  document
+    .getElementById("irDiametro")
+    .addEventListener("change", aggiornaGiocoDaClasseEDiametro);
 
   document
     .getElementById("disegnoUrl")
