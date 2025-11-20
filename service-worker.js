@@ -1,4 +1,3 @@
-// Service Worker molto semplice per PWA
 const CACHE_NAME = "ricette-cuscinetti-v1";
 const ASSETS = [
   "./",
