@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ricette Lavorazione Cuscinetti</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Ricette Lavorazione Cuscinetti</h1>
+    <p>Gestione lavorazioni e componenti IR / OR / Sfere / Gabbia / Grasso / Gioco radiale</p>
+  </header>
+
+  <main class="app-container">
+    <!-- Pannello elenco lavorazioni -->
+    <section class="card card-list">
+      <div class="card-header">
+        <h2>Lavorazioni</h2>
+        <button id="btn-nuova" type="button" class="btn btn-primary">
+          ➕ Nuova lavorazione
+        </button>
+      </div>
+      <div id="lista-lavorazioni" class="lista-lavorazioni">
+        <!-- Righe generate via JS -->
+      </div>
+      <div class="card-footer">
+        <small>I dati sono salvati solo in questo dispositivo (localStorage).</small>
+      </div>
+    </section>
+
+    <!-- Pannello dettaglio / form -->
+    <section class="card card-form">
+      <div class="card-header">
+        <h2>Dettaglio lavorazione</h2>
+        <span id="stato-modifica" class="stato-modifica"></span>
+      </div>
+
+      <form id="form-lavorazione" class="form-grid">
+        <!-- Identificazione -->
+        <div class="form-group full-width">
+          <label for="codice">Codice lavorazione *</label>
+          <input type="text" id="codice" required placeholder="Es. 16101-2RS1" />
+        </div>
+
+        <!-- IR / OR -->
+        <div class="form-group">
+          <label for="irTipo">IR - Tipo</label>
+          <input type="text" id="irTipo" placeholder="Es. IR 16101 A" />
+        </div>
+        <div class="form-group">
+          <label for="orTipo">OR - Tipo</label>
+          <input type="text" id="orTipo" placeholder="Es. OR 16101 B" />
+        </div>
+
+        <!-- Sfere -->
+        <div class="form-group">
+          <label for="diametroSfera">Sfera - Diametro (mm)</label>
+          <input type="number" step="0.001" id="diametroSfera" placeholder="Es. 3.968" />
+        </div>
+        <div class="form-group">
+          <label for="numeroSfere">Sfera - N° sfere</label>
+          <input type="number" id="numeroSfere" placeholder="Es. 13" min="0" />
+        </div>
+
+        <!-- Gabbia / Grasso -->
+        <div class="form-group">
+          <label for="gabbiaTipo">Gabbia - Tipo</label>
+          <input type="text" id="gabbiaTipo" placeholder="Es. Gabbia acciaio" />
+        </div>
+        <div class="form-group">
+          <label for="grassoTipo">Grasso - Tipo</label>
+          <input type="text" id="grassoTipo" placeholder="Es. LGMT2" />
+        </div>
+
+        <!-- Peso -->
+        <div class="form-group">
+          <label for="pesoMin">Peso minimo (g)</label>
+          <input type="number" step="0.01" id="pesoMin" placeholder="Es. 145.0" />
+        </div>
+        <div class="form-group">
+          <label for="pesoMax">Peso massimo (g)</label>
+          <input type="number" step="0.01" id="pesoMax" placeholder="Es. 155.0" />
+        </div>
+
+        <!-- Gioco radiale -->
+        <div class="form-group">
+          <label for="classeGioco">Gioco radiale - Classe</label>
+          <select id="classeGioco">
+            <option value="">— Seleziona —</option>
+            <option value="C2">C2</option>
+            <option value="CN">CN</option>
+            <option value="C3">C3</option>
+            <option value="C4">C4</option>
+            <option value="C5">C5</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="giocoMin">Gioco min (µm)</label>
+          <input type="number" step="0.1" id="giocoMin" placeholder="Es. 3.0" />
+        </div>
+        <div class="form-group">
+          <label for="giocoMax">Gioco max (µm)</label>
+          <input type="number" step="0.1" id="giocoMax" placeholder="Es. 18.0" />
+        </div>
+
+        <!-- Pulsanti -->
+        <div class="form-actions full-width">
+          <button type="submit" class="btn btn-primary">💾 Salva lavorazione</button>
+          <button type="button" id="btn-reset" class="btn btn-secondary">
+            🧹 Svuota form
+          </button>
+          <button type="button" id="btn-elimina" class="btn btn-danger" disabled>
+            🗑️ Elimina lavorazione
+          </button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <small>App locale per gestione ricette di lavorazione cuscinetti · Marco / GitHub Pages</small>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
