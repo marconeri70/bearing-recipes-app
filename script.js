@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale per classi
+// Config gioco radiale
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -83,7 +83,7 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // ⬇️ CLIC sulla riga: carica i dati e APRE la scheda tecnica
+    // clic: carica + apri scheda tecnica
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       apriSchedaTecnica();
@@ -154,8 +154,11 @@ function resetForm() {
   document.getElementById("giocoMin").value = "";
   document.getElementById("giocoMax").value = "";
   document.getElementById("disegnoUrl").value = "";
-  const fileInput = document.getElementById("disegnoFile");
-  if (fileInput) fileInput.value = "";
+
+  const fg = document.getElementById("file-galleria");
+  const fc = document.getElementById("file-camera");
+  if (fg) fg.value = "";
+  if (fc) fc.value = "";
 
   document.getElementById("stato-modifica").textContent = "Nuova lavorazione";
   document.getElementById("btn-elimina").disabled = true;
@@ -185,8 +188,10 @@ function caricaLavorazioneInForm(id) {
   document.getElementById("giocoMax").value = lav.giocoMax ?? "";
   document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
 
-  const fileInput = document.getElementById("disegnoFile");
-  if (fileInput) fileInput.value = "";
+  const fg = document.getElementById("file-galleria");
+  const fc = document.getElementById("file-camera");
+  if (fg) fg.value = "";
+  if (fc) fc.value = "";
 
   immagineCorrenteData = lav.disegnoData || "";
 
@@ -481,11 +486,7 @@ function exportToPDF() {
     }
 
     doc.setFont(undefined, "bold");
-    doc.text(
-      `${index + 1}. ${lav.codice || "(senza codice)"}`,
-      10,
-      y
-    );
+    doc.text(`${index + 1}. ${lav.codice || "(senza codice)"}`, 10, y);
     y += 4;
 
     doc.setFont(undefined, "normal");
@@ -596,10 +597,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-  const fileDisegno = document.getElementById("disegnoFile");
-  fileDisegno.addEventListener("change", (e) => {
+  // Galleria
+  document.getElementById("file-galleria").addEventListener("change", (e) => {
     const file = e.target.files[0];
-    leggiFileDisegno(file);
+    if (file) leggiFileDisegno(file);
+  });
+
+  // Fotocamera
+  document.getElementById("file-camera").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) leggiFileDisegno(file);
   });
 
   // Import / Export
