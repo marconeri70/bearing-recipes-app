@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale (valori generali per classe)
+// Config gioco radiale (valori generali per classe, fallback)
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -9,14 +9,33 @@ const CLASSI_GIOCO = {
   C5: { min: 36, max: 61 }
 };
 
-// In futuro qui potremo usare una tabella dettagliata SKF in funzione di diametro foro IR
+// Tabella caricata da tabella_gioco.csv
+let tabellaGioco = [];
+
+// In futuro qui usiamo SOLO tabellaGioco; ora manteniamo un fallback
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
-  const base = CLASSI_GIOCO[classe];
-  if (!base) return null;
+  if (diametro == null || Number.isNaN(diametro)) {
+    // se manca il diametro, usa solo la classe generale
+    const base = CLASSI_GIOCO[classe];
+    return base ? { min: base.min, max: base.max } : null;
+  }
 
-  // Per ora ignoriamo il diametro: usiamo i range generali della classe.
-  return { min: base.min, max: base.max };
+  // cerca nella tabella caricata
+  const riga = tabellaGioco.find(
+    (r) =>
+      r.classe === classe &&
+      diametro >= r.dMin &&
+      diametro <= r.dMax
+  );
+
+  if (riga) {
+    return { min: r.giocoMin, max: r.giocoMax };
+  }
+
+  // fallback: range generale della classe
+  const base = CLASSI_GIOCO[classe];
+  return base ? { min: base.min, max: base.max } : null;
 }
 
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
@@ -117,7 +136,7 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // clic: seleziona e APRE IL FORM MODIFICABILE (non più direttamente la scheda tecnica)
+    // clic: apre il form modificabile
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
@@ -289,8 +308,8 @@ function gestisciSubmit(event) {
 
   salvaSuStorage();
   idCorrente = lav.id;
-  renderLista();        // aggiorna cruscotto
-  nascondiForm();       // chiudi il form dopo il salvataggio
+  renderLista();
+  nascondiForm();
 }
 
 function leggiNumero(id) {
@@ -334,6 +353,8 @@ function aggiornaGiocoDaClasseEDiametro() {
 
   const campoMin = document.getElementById("giocoMin");
   const campoMax = document.getElementById("giocoMax");
+
+  // se l'utente non ha già scritto qualcosa, compiliamo noi
   if (campoMin.value === "" || campoMax.value === "") {
     campoMin.value = result.min;
     campoMax.value = result.max;
@@ -585,11 +606,9 @@ async function exportZIP() {
 
   const zip = new JSZip();
 
-  // Salviamo tutti i dati (compresa disegnoData) in JSON
   const dataStr = JSON.stringify(lavorazioni, null, 2);
   zip.file("data.json", dataStr);
 
-  // Esportiamo anche le immagini in una cartella /disegni
   const imgFolder = zip.folder("disegni");
 
   lavorazioni.forEach((lav) => {
@@ -645,7 +664,6 @@ async function importZIP(file) {
       return;
     }
 
-    // assicuriamoci che ogni record abbia un id
     nuovi = nuovi.map((lav) => {
       if (!lav.id) lav.id = generaId();
       return lav;
@@ -689,7 +707,7 @@ function apriSchedaTecnica() {
   document.getElementById("scheda-or").textContent = lav.orTipo || "-";
   document.getElementById("scheda-ir-diametro").textContent =
     lav.irDiametro != null ? `${lav.irDiametro} mm` : "-";
-  document.getElementById("scheda-sfere").textContent = `Ø ${
+  document.getElementElementById("scheda-sfere").textContent = `Ø ${
     lav.diametroSfera ?? "-"
   } mm · n=${lav.numeroSfere ?? "-"}`;
   document.getElementById("scheda-gabbia").textContent = lav.gabbiaTipo || "-";
@@ -728,13 +746,61 @@ function chiudiSchedaTecnica() {
 }
 
 // ============================
+// Carica tabella_gioco.csv
+// ============================
+async function caricaTabellaGioco() {
+  try {
+    const resp = await fetch("tabella_gioco.csv");
+    if (!resp.ok) {
+      console.warn("tabella_gioco.csv non trovata (ok se ancora non l'hai creata)");
+      return;
+    }
+    const text = await resp.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+    if (lines.length <= 1) return;
+
+    const header = lines[0].split(";").map((h) => h.trim());
+    const idx = (name) => header.indexOf(name);
+
+    tabellaGioco = lines.slice(1).map((line) => {
+      const parts = line.split(";");
+      const get = (name) => {
+        const i = idx(name);
+        if (i === -1 || i >= parts.length) return "";
+        return parts[i].trim();
+      };
+      const dMin = Number(get("d_min").replace(",", "."));
+      const dMax = Number(get("d_max").replace(",", "."));
+      const classe = get("classe");
+      const gMin = Number(get("gioco_min").replace(",", "."));
+      const gMax = Number(get("gioco_max").replace(",", "."));
+
+      return {
+        dMin: Number.isNaN(dMin) ? null : dMin,
+        dMax: Number.isNaN(dMax) ? null : dMax,
+        classe: classe || "",
+        giocoMin: Number.isNaN(gMin) ? null : gMin,
+        giocoMax: Number.isNaN(gMax) ? null : gMax
+      };
+    });
+
+    console.log("Tabella gioco caricata:", tabellaGioco);
+  } catch (e) {
+    console.error("Errore caricando tabella_gioco.csv:", e);
+  }
+}
+
+// ============================
 // Init
 // ============================
 document.addEventListener("DOMContentLoaded", () => {
+  // carica tabella gioco (se presente)
+  caricaTabellaGioco();
+
   lavorazioni = caricaDaStorage();
   renderLista();
   resetForm();
-  nascondiForm(); // all'avvio solo cruscotto
+  nascondiForm();
 
   const form = document.getElementById("form-lavorazione");
   form.addEventListener("submit", gestisciSubmit);
@@ -754,7 +820,6 @@ document.addEventListener("DOMContentLoaded", () => {
     .getElementById("btn-elimina")
     .addEventListener("click", eliminaLavorazioneCorrente);
 
-  // classe o diametro IR → aggiorna gioco min/max
   document
     .getElementById("classeGioco")
     .addEventListener("change", aggiornaGiocoDaClasseEDiametro);
@@ -770,19 +835,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-  // Galleria
   document.getElementById("file-galleria").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) leggiFileDisegno(file);
   });
 
-  // Fotocamera
   document.getElementById("file-camera").addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) leggiFileDisegno(file);
   });
 
-  // Import / Export CSV/PDF
   document
     .getElementById("btn-export-csv")
     .addEventListener("click", exportToCSV);
@@ -800,12 +862,10 @@ document.addEventListener("DOMContentLoaded", () => {
     fileImport.value = "";
   });
 
-  // Export ZIP
   document
     .getElementById("btn-export-zip")
     .addEventListener("click", exportZIP);
 
-  // Import ZIP
   const fileImportZip = document.getElementById("file-import-zip");
   document.getElementById("btn-import-zip").addEventListener("click", () => {
     fileImportZip.click();
@@ -816,7 +876,6 @@ document.addEventListener("DOMContentLoaded", () => {
     fileImportZip.value = "";
   });
 
-  // Scheda tecnica (tasto dedicato)
   document
     .getElementById("btn-scheda-tecnica")
     .addEventListener("click", apriSchedaTecnica);
