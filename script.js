@@ -12,28 +12,26 @@ const CLASSI_GIOCO = {
 // Tabella caricata da tabella_gioco.csv
 let tabellaGioco = [];
 
-// In futuro qui usiamo SOLO tabellaGioco; ora manteniamo un fallback
+// Classe + diametro → gioco min/max
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
+
+  // se non c'è il diametro, usa i valori generali della classe
   if (diametro == null || Number.isNaN(diametro)) {
-    // se manca il diametro, usa solo la classe generale
     const base = CLASSI_GIOCO[classe];
     return base ? { min: base.min, max: base.max } : null;
   }
 
-  // cerca nella tabella caricata
+  // cerca nella tabella caricata dal CSV
   const riga = tabellaGioco.find(
-    (r) =>
-      r.classe === classe &&
-      diametro >= r.dMin &&
-      diametro <= r.dMax
+    (r) => r.classe === classe && diametro >= r.dMin && diametro <= r.dMax
   );
 
   if (riga) {
     return { min: r.giocoMin, max: r.giocoMax };
   }
 
-  // fallback: range generale della classe
+  // fallback generale
   const base = CLASSI_GIOCO[classe];
   return base ? { min: base.min, max: base.max } : null;
 }
@@ -345,20 +343,13 @@ function eliminaLavorazioneCorrente() {
 function aggiornaGiocoDaClasseEDiametro() {
   const classe = document.getElementById("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
-
   if (!classe) return;
 
   const result = trovaGiocoRadialeDaClasseEDiametro(classe, diametro);
   if (!result) return;
 
-  const campoMin = document.getElementById("giocoMin");
-  const campoMax = document.getElementById("giocoMax");
-
-  // se l'utente non ha già scritto qualcosa, compiliamo noi
-  if (campoMin.value === "" || campoMax.value === "") {
-    campoMin.value = result.min;
-    campoMax.value = result.max;
-  }
+  document.getElementById("giocoMin").value = result.min ?? "";
+  document.getElementById("giocoMax").value = result.max ?? "";
 }
 
 // ============================
@@ -707,7 +698,7 @@ function apriSchedaTecnica() {
   document.getElementById("scheda-or").textContent = lav.orTipo || "-";
   document.getElementById("scheda-ir-diametro").textContent =
     lav.irDiametro != null ? `${lav.irDiametro} mm` : "-";
-  document.getElementElementById("scheda-sfere").textContent = `Ø ${
+  document.getElementById("scheda-sfere").textContent = `Ø ${
     lav.diametroSfera ?? "-"
   } mm · n=${lav.numeroSfere ?? "-"}`;
   document.getElementById("scheda-gabbia").textContent = lav.gabbiaTipo || "-";
