@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale (fallback generico per alcune classi)
+// Config gioco radiale (fallback generico)
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -19,29 +19,49 @@ let idCorrente = null;
 let immagineCorrenteData = "";
 
 // ============================
-// Gioco radiale da classe + diametro
+// Gioco radiale da classe + diametro (NUOVA LOGICA)
 // ============================
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
 
-  // se non c'è il diametro usiamo il fallback generico (se esiste)
-  if (diametro == null || Number.isNaN(diametro)) {
-    const base = CLASSI_GIOCO[classe];
-    return base ? { min: base.min, max: base.max } : null;
-  }
-
-  // cerca nella tabella caricata dal CSV
-  const riga = tabellaGioco.find(
-    (r) => r.classe === classe && diametro >= r.dMin && diametro <= r.dMax
+  // Tutte le righe di quella classe nella tabella CSV
+  const righeClasse = tabellaGioco.filter(
+    (r) => r.classe === classe && r.giocoMin != null && r.giocoMax != null
   );
 
-  if (riga) {
-    return { min: r.giocoMin, max: r.giocoMax };
+  // Se abbiamo righe per quella classe
+  if (righeClasse.length > 0) {
+    // Se il diametro è valido provo match d_min ≤ d ≤ d_max
+    if (diametro != null && !Number.isNaN(diametro)) {
+      const match = righeClasse.find((r) => {
+        const minOK = r.dMin == null || diametro >= r.dMin;
+        const maxOK = r.dMax == null || diametro <= r.dMax;
+        return minOK && maxOK;
+      });
+
+      if (match) {
+        return {
+          min: match.giocoMin,
+          max: match.giocoMax
+        };
+      }
+    }
+
+    // Niente match preciso o diametro vuoto → media della classe
+    const sommaMin = righeClasse.reduce((s, r) => s + r.giocoMin, 0);
+    const sommaMax = righeClasse.reduce((s, r) => s + r.giocoMax, 0);
+    const avgMin = Math.round(sommaMin / righeClasse.length);
+    const avgMax = Math.round(sommaMax / righeClasse.length);
+    return { min: avgMin, max: avgMax };
   }
 
-  // fallback generico se non trova record specifici
+  // Nessuna riga nel CSV → fallback generico se esiste
   const base = CLASSI_GIOCO[classe];
-  return base ? { min: base.min, max: base.max } : null;
+  if (base) {
+    return { min: base.min, max: base.max };
+  }
+
+  return null;
 }
 
 // ============================
@@ -101,7 +121,7 @@ function nascondiForm() {
 }
 
 // ============================
-// Lista lavorazioni (cruscotto)
+// Lista lavorazioni
 // ============================
 function aggiornaConteggio() {
   const label = document.getElementById("conteggio-lavorazioni");
@@ -140,7 +160,6 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // click → apre il form
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
@@ -347,18 +366,32 @@ function eliminaLavorazioneCorrente() {
 }
 
 // ============================
-// Classe gioco + diametro → min/max
+// Aggiorna gioco quando cambia classe o diametro (NUOVA)
 // ============================
 function aggiornaGiocoDaClasseEDiametro() {
   const classe = document.getElementById("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
-  if (!classe) return;
+
+  // Se la classe è vuota → svuota i campi
+  if (!classe) {
+    document.getElementById("giocoMin").value = "";
+    document.getElementById("giocoMax").value = "";
+    return;
+  }
 
   const result = trovaGiocoRadialeDaClasseEDiametro(classe, diametro);
-  if (!result) return;
 
-  document.getElementById("giocoMin").value = result.min ?? "";
-  document.getElementById("giocoMax").value = result.max ?? "";
+  // Se non trovo nessun valore → svuoto, così non rimane quello vecchio
+  if (!result) {
+    document.getElementById("giocoMin").value = "";
+    document.getElementById("giocoMax").value = "";
+    return;
+  }
+
+  document.getElementById("giocoMin").value =
+    result.min != null ? result.min : "";
+  document.getElementById("giocoMax").value =
+    result.max != null ? result.max : "";
 }
 
 // ============================
@@ -721,7 +754,9 @@ function apriSchedaTecnica() {
       ? `${lav.pesoMin ?? "-"} – ${lav.pesoMax ?? "-"} g`
       : "-";
   document.getElementById("scheda-gioco").textContent =
-    lav.classeGioco || lav.giocoMin != null || lav.giocoMax != null
+    lav.classeGioco ||
+    lav.giocoMin != null ||
+    lav.giocoMax != null
       ? `${lav.classeGioco || ""} ${
           lav.giocoMin ?? "-"
         } – ${lav.giocoMax ?? "-"} µm`
@@ -789,7 +824,6 @@ async function caricaTabellaGioco() {
 
     console.log("Tabella gioco caricata:", tabellaGioco);
 
-    // Popola la tendina delle classi in base al CSV
     const select = document.getElementById("classeGioco");
     if (select) {
       const classi = Array.from(
@@ -858,7 +892,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-  // pulsanti per aprire file input
   document
     .getElementById("btn-file-galleria")
     .addEventListener("click", () =>
