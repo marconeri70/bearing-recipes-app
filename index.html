@@ -157,7 +157,6 @@
             <div class="form-group">
               <label for="classeGioco">Gioco radiale - Classe</label>
               <select id="classeGioco" class="input">
-                <!-- Riempita automaticamente da tabella_gioco.csv -->
                 <option value="">Seleziona classe…</option>
               </select>
             </div>
@@ -246,6 +245,16 @@
       </div>
 
       <div class="modal-body">
+        <!-- Disegno + dati: per la stampa la disposizione viene gestita dal CSS -->
+        <div class="scheda-drawing">
+          <div class="drawing-preview large">
+            <img id="scheda-drawing-image" alt="Disegno tecnico" />
+            <div id="scheda-drawing-placeholder" class="drawing-placeholder">
+              Nessuna immagine disponibile.
+            </div>
+          </div>
+        </div>
+
         <div class="scheda-grid">
           <div class="scheda-section-title">Dati principali</div>
 
@@ -293,15 +302,6 @@
           <div class="scheda-field">
             <span class="scheda-label">Gioco radiale</span>
             <span id="scheda-gioco" class="scheda-value">-</span>
-          </div>
-        </div>
-
-        <div class="scheda-drawing">
-          <div class="drawing-preview large">
-            <img id="scheda-drawing-image" alt="Disegno tecnico" />
-            <div id="scheda-drawing-placeholder" class="drawing-placeholder">
-              Nessuna immagine disponibile.
-            </div>
           </div>
         </div>
       </div>
