@@ -2,249 +2,298 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
   <title>Ricette Lavorazione Cuscinetti</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.webmanifest" />
-  <meta name="theme-color" content="#0f172a" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
 
   <link rel="stylesheet" href="style.css" />
+
+  <!-- jsPDF per export PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <!-- JSZip per import/export ZIP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0b4f9c" />
 </head>
-
 <body>
-  <header class="app-header">
-    <h1>Ricette Lavorazione Cuscinetti</h1>
-    <p>Gestione lavorazioni: IR, OR, sfere, gabbia, grasso, schermi, gioco radiale</p>
-  </header>
+  <div class="app-root">
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="app-header-content">
+        <h1>Ricette Lavorazione Cuscinetti</h1>
+        <p>Gestione lavorazioni: IR, OR, sfere, gabbia, grasso, schermi, gioco radiale</p>
+      </div>
+    </header>
 
-  <main class="app-container">
-
-    <!-- ====================== -->
-    <!-- LISTA LAVORAZIONI (CRUSCOTTO) -->
-    <!-- ====================== -->
-    <section class="card card-list">
-
-      <div class="card-header">
-        <div>
+    <main class="app-main">
+      <!-- COLONNA SINISTRA: LISTA LAVORAZIONI -->
+      <section class="panel panel-left">
+        <div class="panel-header">
           <h2>Lavorazioni</h2>
-          <span id="conteggio-lavorazioni" class="counter-label"></span>
-        </div>
-        <button id="btn-nuova" type="button" class="btn btn-primary">➕ Nuova</button>
-      </div>
-
-      <div class="toolbar">
-        <!-- CSV -->
-        <button id="btn-import" class="btn btn-secondary btn-sm">📥 Importa CSV</button>
-        <input type="file" id="file-import" accept=".csv" style="display:none">
-
-        <button id="btn-export-csv" class="btn btn-secondary btn-sm">📤 Esporta CSV</button>
-        <button id="btn-export-pdf" class="btn btn-secondary btn-sm">📄 Esporta PDF</button>
-
-        <!-- ZIP -->
-        <button id="btn-import-zip" class="btn btn-secondary btn-sm">📦 Importa ZIP</button>
-        <input type="file" id="file-import-zip" accept=".zip" style="display:none">
-
-        <button id="btn-export-zip" class="btn btn-secondary btn-sm">📦 Esporta ZIP</button>
-      </div>
-
-      <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
-
-      <div class="card-footer">
-        <small>Dati e immagini salvati solo sul dispositivo (localStorage).</small>
-      </div>
-
-    </section>
-
-    <!-- ====================== -->
-    <!-- DETTAGLIO LAVORAZIONE (FORM, NASCOSTO DI DEFAULT) -->
-    <!-- ====================== -->
-    <section id="card-form" class="card card-form is-hidden">
-
-      <div class="card-header">
-        <div>
-          <h2>Dettaglio lavorazione</h2>
-          <span id="stato-modifica" class="stato-modifica"></span>
+          <span id="conteggio-lavorazioni" class="badge-count">0 ricette salvate</span>
         </div>
 
-        <button id="btn-scheda-tecnica" class="btn btn-secondary btn-sm" disabled>
-          📘 Scheda tecnica
-        </button>
-      </div>
-
-      <!-- FORM -->
-      <form id="form-lavorazione" class="form-grid">
-
-        <div class="form-group full-width">
-          <label for="codice">Codice lavorazione *</label>
-          <input id="codice" type="text" required placeholder="Es. BB1-0654 A">
-        </div>
-
-        <div class="form-group">
-          <label for="irTipo">IR - Tipo</label>
-          <input id="irTipo" type="text" placeholder="Es. BB1-0654">
-        </div>
-
-        <div class="form-group">
-          <label for="irDiametro">Diametro foro IR (mm)</label>
-          <input id="irDiametro" type="number" step="0.01" placeholder="Es. 25">
-        </div>
-
-        <div class="form-group">
-          <label for="orTipo">OR - Tipo</label>
-          <input id="orTipo" type="text" placeholder="Es. BB1-0654">
-        </div>
-
-        <div class="form-group">
-          <label for="diametroSfera">Sfera - Diametro (mm)</label>
-          <input id="diametroSfera" type="number" step="0.001" placeholder="Es. 3.968">
-        </div>
-
-        <div class="form-group">
-          <label for="numeroSfere">Sfera - Numero sfere</label>
-          <input id="numeroSfere" type="number" placeholder="Es. 9">
-        </div>
-
-        <div class="form-group">
-          <label for="gabbiaTipo">Gabbia - Tipo</label>
-          <input id="gabbiaTipo" type="text" placeholder="Es. CJ-6205 A-LS2P">
-        </div>
-
-        <div class="form-group">
-          <label for="grassoTipo">Grasso - Tipo</label>
-          <input id="grassoTipo" type="text" placeholder="Es. GXN">
-        </div>
-
-        <div class="form-group full-width">
-          <label for="schermoTipo">Schermo / Tenuta</label>
-          <input id="schermoTipo" type="text" placeholder="Es. 2RS1, LS2P, ecc.">
-        </div>
-
-        <div class="form-group">
-          <label for="pesoMin">Peso minimo (g)</label>
-          <input id="pesoMin" type="number" step="0.01">
-        </div>
-
-        <div class="form-group">
-          <label for="pesoMax">Peso massimo (g)</label>
-          <input id="pesoMax" type="number" step="0.01">
-        </div>
-
-        <div class="form-group">
-          <label for="classeGioco">Gioco radiale - Classe</label>
-          <select id="classeGioco">
-            <option value="">—</option>
-            <option value="C2">C2</option>
-            <option value="CN">CN</option>
-            <option value="C3">C3</option>
-            <option value="C4">C4</option>
-            <option value="C5">C5</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="giocoMin">Gioco min (µm)</label>
-          <input id="giocoMin" type="number" step="0.1">
-        </div>
-
-        <div class="form-group">
-          <label for="giocoMax">Gioco max (µm)</label>
-          <input id="giocoMax" type="number" step="0.1">
-        </div>
-
-        <!-- CARICAMENTO IMMAGINI -->
-        <div class="form-group full-width">
-          <label>Carica disegno tecnico</label>
-
-          <!-- Galleria -->
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('file-galleria').click()">
-            📁 Scegli dalla galleria
+        <div class="toolbar">
+          <button id="btn-import" class="btn btn-secondary">
+            📥 Importa CSV
           </button>
-          <input type="file" id="file-galleria" accept="image/*" style="display:none">
-
-          <!-- Fotocamera -->
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('file-camera').click()">
-            📸 Scatta foto
+          <button id="btn-export-csv" class="btn btn-secondary">
+            📤 Esporta CSV
           </button>
-          <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none">
-
-          <input id="disegnoUrl" type="url" placeholder="URL immagine (opzionale)">
         </div>
 
-        <div class="form-actions full-width">
-          <button type="submit" class="btn btn-primary">💾 Salva</button>
-          <button type="button" id="btn-reset" class="btn btn-secondary">🧹 Svuota</button>
-          <button type="button" id="btn-elimina" class="btn btn-danger" disabled>🗑️ Elimina</button>
+        <div class="toolbar">
+          <button id="btn-export-pdf" class="btn btn-secondary">
+            📄 Esporta PDF
+          </button>
         </div>
 
-      </form>
+        <div class="toolbar">
+          <button id="btn-import-zip" class="btn btn-secondary">
+            🗂️ Importa ZIP
+          </button>
+          <button id="btn-export-zip" class="btn btn-secondary">
+            🧷 Esporta ZIP
+          </button>
+        </div>
 
-      <!-- PREVIEW IMMAGINE -->
-      <div class="drawing-container full-width">
-        <h3>Disegno tecnico</h3>
-        <div id="drawing-placeholder" class="drawing-placeholder">Nessun disegno caricato</div>
-        <img id="drawing-image" class="drawing-image" src="">
-      </div>
+        <!-- input nascosti per import -->
+        <input id="file-import" type="file" accept=".csv,text/csv" style="display:none" />
+        <input id="file-import-zip" type="file" accept=".zip,application/zip" style="display:none" />
 
-    </section>
-  </main>
+        <div id="lista-lavorazioni" class="lista-lavorazioni">
+          <!-- righe generate da JS -->
+        </div>
 
-  <footer class="app-footer">
-    <small>App locale · GitHub Pages</small>
-  </footer>
+        <div class="panel-footer">
+          <button id="btn-nuova" class="btn btn-primary btn-big">
+            ➕ Nuova
+          </button>
+          <p class="note-storage">
+            Dati e immagini salvati solo sul dispositivo (localStorage).
+          </p>
+        </div>
+      </section>
 
-  <!-- ====================== -->
+      <!-- COLONNA DESTRA: DETTAGLIO LAVORAZIONE -->
+      <section class="panel panel-right">
+        <div id="card-form" class="card card-form is-hidden">
+          <div class="card-header">
+            <div>
+              <h2>Dettaglio lavorazione</h2>
+              <p id="stato-modifica" class="card-subtitle">Nuova lavorazione</p>
+            </div>
+            <button id="btn-scheda-tecnica" class="btn btn-outline" disabled>
+              📘 Scheda tecnica
+            </button>
+          </div>
+
+          <form id="form-lavorazione" class="form-grid">
+            <!-- Codice -->
+            <div class="form-group full">
+              <label for="codice">Codice lavorazione *</label>
+              <input id="codice" type="text" class="input" placeholder="Es. BB1-0654 A" required />
+            </div>
+
+            <!-- IR / Diametro foro IR -->
+            <div class="form-group">
+              <label for="irTipo">IR - Tipo</label>
+              <input id="irTipo" type="text" class="input" placeholder="Es. BB1-0654" />
+            </div>
+
+            <div class="form-group">
+              <label for="irDiametro">Diametro foro IR (mm)</label>
+              <input id="irDiametro" type="number" step="0.001" class="input" placeholder="Es. 25" />
+            </div>
+
+            <!-- OR -->
+            <div class="form-group">
+              <label for="orTipo">OR - Tipo</label>
+              <input id="orTipo" type="text" class="input" placeholder="Es. BB1-0654" />
+            </div>
+
+            <!-- Sfere -->
+            <div class="form-group">
+              <label for="diametroSfera">Sfera - Diametro (mm)</label>
+              <input id="diametroSfera" type="number" step="0.001" class="input" placeholder="Es. 6,747" />
+            </div>
+
+            <div class="form-group">
+              <label for="numeroSfere">Sfera - Numero sfere (n)</label>
+              <input id="numeroSfere" type="number" step="1" class="input" placeholder="Es. 9" />
+            </div>
+
+            <!-- Gabbia / Grasso / Schermo -->
+            <div class="form-group">
+              <label for="gabbiaTipo">Gabbia - Tipo</label>
+              <input id="gabbiaTipo" type="text" class="input" placeholder="Es. CJ-6205 A TN91" />
+            </div>
+
+            <div class="form-group">
+              <label for="grassoTipo">Grasso - Tipo</label>
+              <input id="grassoTipo" type="text" class="input" placeholder="Es. GXN" />
+            </div>
+
+            <div class="form-group">
+              <label for="schermoTipo">Schermo / Tenuta</label>
+              <input id="schermoTipo" type="text" class="input" placeholder="Es. SG-BB1-2557 E" />
+            </div>
+
+            <!-- Peso -->
+            <div class="form-group">
+              <label for="pesoMin">Peso minimo (g)</label>
+              <input id="pesoMin" type="number" step="0.01" class="input" />
+            </div>
+
+            <div class="form-group">
+              <label for="pesoMax">Peso massimo (g)</label>
+              <input id="pesoMax" type="number" step="0.01" class="input" />
+            </div>
+
+            <!-- Gioco radiale -->
+            <div class="form-group">
+              <label for="classeGioco">Gioco radiale - Classe</label>
+              <select id="classeGioco" class="input">
+                <!-- Riempita automaticamente da tabella_gioco.csv -->
+                <option value="">Seleziona classe…</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="giocoMin">Gioco min (µm)</label>
+              <input id="giocoMin" type="number" step="0.1" class="input" />
+            </div>
+
+            <div class="form-group">
+              <label for="giocoMax">Gioco max (µm)</label>
+              <input id="giocoMax" type="number" step="0.1" class="input" />
+            </div>
+
+            <!-- Disegno tecnico -->
+            <div class="form-group full">
+              <label>Carica disegno tecnico</label>
+              <button type="button" id="btn-file-galleria" class="btn btn-light full">
+                📁 Scegli dalla galleria
+              </button>
+              <button type="button" id="btn-file-camera" class="btn btn-light full">
+                📷 Scatta foto
+              </button>
+              <input id="file-galleria" type="file" accept="image/*" style="display:none" />
+              <input
+                id="file-camera"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style="display:none"
+              />
+            </div>
+
+            <div class="form-group full">
+              <label for="disegnoUrl">URL immagine (opzionale)</label>
+              <input
+                id="disegnoUrl"
+                type="url"
+                class="input"
+                placeholder="https://…"
+              />
+            </div>
+
+            <!-- Preview disegno -->
+            <div class="form-group full">
+              <label>Disegno tecnico (preview)</label>
+              <div class="drawing-preview">
+                <img id="drawing-image" alt="Disegno tecnico" />
+                <div id="drawing-placeholder" class="drawing-placeholder">
+                  Nessuna immagine caricata.
+                </div>
+              </div>
+            </div>
+
+            <!-- Pulsanti -->
+            <div class="form-actions full">
+              <button type="submit" class="btn btn-primary">
+                💾 Salva
+              </button>
+              <button type="button" id="btn-reset" class="btn btn-secondary">
+                🧹 Svuota
+              </button>
+              <button type="button" id="btn-elimina" class="btn btn-danger" disabled>
+                🗑️ Elimina
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
   <!-- MODALE SCHEDA TECNICA -->
-  <!-- ====================== -->
   <div id="scheda-modal" class="modal hidden">
     <div class="modal-backdrop"></div>
-
     <div class="modal-content">
       <div class="modal-header">
-        <h3 id="scheda-codice"></h3>
-        <button id="scheda-close" class="modal-close">✖</button>
+        <div>
+          <h3 id="scheda-codice">Codice</h3>
+          <p id="scheda-sub" class="modal-subtitle"></p>
+        </div>
+        <button id="scheda-close" class="btn btn-icon">✖</button>
       </div>
 
       <div class="modal-body">
-        <p id="scheda-sub" class="scheda-sub"></p>
-
         <div class="scheda-grid">
-          <div><strong>IR:</strong> <span id="scheda-ir"></span></div>
-          <div><strong>OR:</strong> <span id="scheda-or"></span></div>
-          <div><strong>Foro IR:</strong> <span id="scheda-ir-diametro"></span></div>
-          <div><strong>Sfere:</strong> <span id="scheda-sfere"></span></div>
-          <div><strong>Gabbia:</strong> <span id="scheda-gabbia"></span></div>
-          <div><strong>Grasso:</strong> <span id="scheda-grasso"></span></div>
-          <div><strong>Schermo:</strong> <span id="scheda-schermo"></span></div>
-          <div><strong>Peso:</strong> <span id="scheda-peso"></span></div>
-          <div><strong>Gioco:</strong> <span id="scheda-gioco"></span></div>
+          <div class="scheda-field">
+            <span class="scheda-label">IR - Tipo</span>
+            <span id="scheda-ir" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">OR - Tipo</span>
+            <span id="scheda-or" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Diametro foro IR</span>
+            <span id="scheda-ir-diametro" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Sfere</span>
+            <span id="scheda-sfere" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Gabbia</span>
+            <span id="scheda-gabbia" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Grasso</span>
+            <span id="scheda-grasso" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Schermo / Tenuta</span>
+            <span id="scheda-schermo" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Peso</span>
+            <span id="scheda-peso" class="scheda-value">-</span>
+          </div>
+          <div class="scheda-field">
+            <span class="scheda-label">Gioco radiale</span>
+            <span id="scheda-gioco" class="scheda-value">-</span>
+          </div>
         </div>
 
-        <div class="scheda-disegno">
-          <div id="scheda-drawing-placeholder" class="drawing-placeholder">Nessuna immagine</div>
-          <img id="scheda-drawing-image" class="drawing-image" src="">
+        <div class="scheda-drawing">
+          <div class="drawing-preview large">
+            <img id="scheda-drawing-image" alt="Disegno tecnico" />
+            <div id="scheda-drawing-placeholder" class="drawing-placeholder">
+              Nessuna immagine disponibile.
+            </div>
+          </div>
         </div>
-
       </div>
-
     </div>
   </div>
 
-  <!-- jsPDF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- JSZip -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-  <!-- Service Worker -->
-  <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("service-worker.js");
-    }
-  </script>
-
-  <script src="script.js"></script>
-
+  <script src="script.js" defer></script>
 </body>
 </html>
