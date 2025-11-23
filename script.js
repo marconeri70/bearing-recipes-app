@@ -1,5 +1,5 @@
 // ============================
-// Config gioco radiale (valori generali per classe, fallback)
+// Config gioco radiale (fallback generico per alcune classi)
 // ============================
 const CLASSI_GIOCO = {
   C2: { min: 2, max: 11 },
@@ -12,11 +12,19 @@ const CLASSI_GIOCO = {
 // Tabella caricata da tabella_gioco.csv
 let tabellaGioco = [];
 
-// Classe + diametro → gioco min/max
+const STORAGE_KEY = "bearing_recipes_lavorazioni";
+
+let lavorazioni = [];
+let idCorrente = null;
+let immagineCorrenteData = "";
+
+// ============================
+// Gioco radiale da classe + diametro
+// ============================
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
 
-  // se non c'è il diametro, usa i valori generali della classe
+  // se non c'è il diametro usiamo il fallback generico (se esiste)
   if (diametro == null || Number.isNaN(diametro)) {
     const base = CLASSI_GIOCO[classe];
     return base ? { min: base.min, max: base.max } : null;
@@ -31,19 +39,13 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
     return { min: r.giocoMin, max: r.giocoMax };
   }
 
-  // fallback generale
+  // fallback generico se non trova record specifici
   const base = CLASSI_GIOCO[classe];
   return base ? { min: base.min, max: base.max } : null;
 }
 
-const STORAGE_KEY = "bearing_recipes_lavorazioni";
-
-let lavorazioni = [];
-let idCorrente = null;
-let immagineCorrenteData = "";
-
 // ============================
-// Utility
+// Storage
 // ============================
 function salvaSuStorage() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
@@ -61,7 +63,11 @@ function caricaDaStorage() {
 }
 
 function generaId() {
-  return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8);
+  return (
+    Date.now().toString(36) +
+    "-" +
+    Math.random().toString(36).substring(2, 8)
+  );
 }
 
 function aggiornaDisegnoPreview(url) {
@@ -134,7 +140,7 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // clic: apre il form modificabile
+    // click → apre il form
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
@@ -178,7 +184,10 @@ function renderLista() {
       badge.appendChild(b);
     }
 
-    if ((lav.disegnoData && lav.disegnoData !== "") || (lav.disegnoUrl && lav.disegnoUrl !== "")) {
+    if (
+      (lav.disegnoData && lav.disegnoData !== "") ||
+      (lav.disegnoUrl && lav.disegnoUrl !== "")
+    ) {
       const d = document.createElement("span");
       d.className = "badge badge-disegno";
       d.textContent = "Disegno";
@@ -606,7 +615,9 @@ async function exportZIP() {
     if (!lav.disegnoData) return;
 
     const dataUrl = lav.disegnoData;
-    const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.\-]+);base64,(.+)$/);
+    const match = dataUrl.match(
+      /^data:(image\/[a-zA-Z0-9+.\-]+);base64,(.+)$/
+    );
     if (!match) return;
 
     const mime = match[1];
@@ -703,7 +714,8 @@ function apriSchedaTecnica() {
   } mm · n=${lav.numeroSfere ?? "-"}`;
   document.getElementById("scheda-gabbia").textContent = lav.gabbiaTipo || "-";
   document.getElementById("scheda-grasso").textContent = lav.grassoTipo || "-";
-  document.getElementById("scheda-schermo").textContent = lav.schermoTipo || "-";
+  document.getElementById("scheda-schermo").textContent =
+    lav.schermoTipo || "-";
   document.getElementById("scheda-peso").textContent =
     lav.pesoMin != null || lav.pesoMax != null
       ? `${lav.pesoMin ?? "-"} – ${lav.pesoMax ?? "-"} g`
@@ -737,13 +749,13 @@ function chiudiSchedaTecnica() {
 }
 
 // ============================
-// Carica tabella_gioco.csv
+// Carica tabella_gioco.csv e popola le classi
 // ============================
 async function caricaTabellaGioco() {
   try {
     const resp = await fetch("tabella_gioco.csv");
     if (!resp.ok) {
-      console.warn("tabella_gioco.csv non trovata (ok se ancora non l'hai creata)");
+      console.warn("tabella_gioco.csv non trovata");
       return;
     }
     const text = await resp.text();
@@ -776,6 +788,27 @@ async function caricaTabellaGioco() {
     });
 
     console.log("Tabella gioco caricata:", tabellaGioco);
+
+    // Popola la tendina delle classi in base al CSV
+    const select = document.getElementById("classeGioco");
+    if (select) {
+      const classi = Array.from(
+        new Set(tabellaGioco.map((r) => r.classe).filter((c) => c))
+      ).sort();
+
+      select.innerHTML = "";
+      const optEmpty = document.createElement("option");
+      optEmpty.value = "";
+      optEmpty.textContent = "Seleziona classe…";
+      select.appendChild(optEmpty);
+
+      classi.forEach((cls) => {
+        const opt = document.createElement("option");
+        opt.value = cls;
+        opt.textContent = cls;
+        select.appendChild(opt);
+      });
+    }
   } catch (e) {
     console.error("Errore caricando tabella_gioco.csv:", e);
   }
@@ -785,7 +818,6 @@ async function caricaTabellaGioco() {
 // Init
 // ============================
 document.addEventListener("DOMContentLoaded", () => {
-  // carica tabella gioco (se presente)
   caricaTabellaGioco();
 
   lavorazioni = caricaDaStorage();
@@ -825,6 +857,18 @@ document.addEventListener("DOMContentLoaded", () => {
         aggiornaDisegnoPreview(e.target.value);
       }
     });
+
+  // pulsanti per aprire file input
+  document
+    .getElementById("btn-file-galleria")
+    .addEventListener("click", () =>
+      document.getElementById("file-galleria").click()
+    );
+  document
+    .getElementById("btn-file-camera")
+    .addEventListener("click", () =>
+      document.getElementById("file-camera").click()
+    );
 
   document.getElementById("file-galleria").addEventListener("change", (e) => {
     const file = e.target.files[0];
@@ -876,7 +920,10 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("scheda-modal")
     .addEventListener("click", (e) => {
-      if (e.target.id === "scheda-modal" || e.target.classList.contains("modal-backdrop")) {
+      if (
+        e.target.id === "scheda-modal" ||
+        e.target.classList.contains("modal-backdrop")
+      ) {
         chiudiSchedaTecnica();
       }
     });
