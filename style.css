@@ -441,7 +441,7 @@ body {
 .modal-body {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
   gap: 16px;
 }
 
@@ -450,6 +450,7 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 6px;
+  align-self: flex-start;
 }
 .scheda-section-title {
   margin-top: 4px;
@@ -504,28 +505,71 @@ body {
   }
 }
 
-/* Stampa scheda tecnica */
+/* ============================
+   STAMPA SCHEDA TECNICA
+   ============================ */
 @media print {
   body {
     background: #ffffff;
   }
-  .app-header,
-  .app-main,
+
+  /* nascondi tutto… */
+  body * {
+    visibility: hidden;
+  }
+
+  /* …tranne la scheda tecnica */
+  #scheda-print-area,
+  #scheda-print-area * {
+    visibility: visible;
+  }
+
+  /* la scheda occupa tutta la pagina */
+  #scheda-print-area {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
   .modal-backdrop,
   #scheda-close,
   #scheda-print {
     display: none !important;
   }
-  .modal {
-    display: block !important;
-    position: static;
-    inset: auto;
+
+  /* disposizione verticale: prima disegno, poi dati */
+  .modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
-  .modal-content {
-    box-shadow: none;
-    border-radius: 0;
-    max-width: 100%;
-    width: 100%;
+
+  .scheda-drawing {
+    order: 1;
+    page-break-after: always; /* disegno da solo nella prima pagina */
+  }
+
+  .scheda-grid {
+    order: 2;
+  }
+
+  /* disegno grande, centrato */
+  .scheda-drawing .drawing-preview.large {
+    min-height: 0;
     height: auto;
+    border-radius: 0;
+    border: none;
+    padding: 0;
+  }
+
+  .scheda-drawing img {
+    display: block !important;
+    width: 100%;
+    max-height: none;
+    object-fit: contain;
   }
 }
