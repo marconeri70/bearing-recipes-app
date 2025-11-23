@@ -960,4 +960,12 @@ document.addEventListener("DOMContentLoaded", () => {
         chiudiSchedaTecnica();
       }
     });
+
+  // 🔹 Bottone stampa scheda tecnica
+  document
+    .getElementById("scheda-print")
+    .addEventListener("click", (e) => {
+      e.stopPropagation();
+      window.print();
+    });
 });
