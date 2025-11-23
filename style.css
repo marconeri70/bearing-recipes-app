@@ -275,6 +275,11 @@ body {
   white-space: nowrap;
 }
 
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
 .btn-big {
   width: 100%;
   padding: 10px 14px;
@@ -401,12 +406,13 @@ body {
 }
 .modal-content {
   position: relative;
-  background: #ffffff;
-  border-radius: 18px;
+  background: radial-gradient(circle at top left, #eef2ff, #ffffff 45%);
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.55);
-  padding: 14px 16px 16px;
-  max-width: 720px;
-  width: min(95%, 720px);
+  padding: 18px 20px 20px;
+  max-width: 820px;
+  width: min(95%, 820px);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -420,37 +426,55 @@ body {
 }
 .modal-header h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
 }
 .modal-subtitle {
   margin: 2px 0 0;
   font-size: 0.8rem;
   color: var(--text-soft);
 }
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .modal-body {
-  margin-top: 10px;
+  margin-top: 12px;
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.1fr);
+  gap: 16px;
 }
 
 /* Scheda tecnica */
 .scheda-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 6px;
+}
+.scheda-section-title {
+  margin-top: 4px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 600;
 }
 .scheda-field {
   display: flex;
   flex-direction: column;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.95);
+  border-left: 3px solid #2563eb22;
 }
 .scheda-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-soft);
 }
 .scheda-value {
   font-size: 0.9rem;
   font-weight: 500;
+  margin-top: 2px;
 }
 
 .scheda-drawing {
@@ -477,5 +501,31 @@ body {
   }
   .modal-body {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Stampa scheda tecnica */
+@media print {
+  body {
+    background: #ffffff;
+  }
+  .app-header,
+  .app-main,
+  .modal-backdrop,
+  #scheda-close,
+  #scheda-print {
+    display: none !important;
+  }
+  .modal {
+    display: block !important;
+    position: static;
+    inset: auto;
+  }
+  .modal-content {
+    box-shadow: none;
+    border-radius: 0;
+    max-width: 100%;
+    width: 100%;
+    height: auto;
   }
 }
