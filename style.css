@@ -487,3 +487,9 @@ body {
     max-height: 100vh;            /* pieno schermo sul telefono */
   }
 }
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
