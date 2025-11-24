@@ -64,9 +64,7 @@
         <input id="file-import" type="file" accept=".csv,text/csv" style="display:none" />
         <input id="file-import-zip" type="file" accept=".zip,application/zip" style="display:none" />
 
-        <div id="lista-lavorazioni" class="lista-lavorazioni">
-          <!-- righe generate da JS -->
-        </div>
+        <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
 
         <div class="panel-footer">
           <button id="btn-nuova" class="btn btn-primary btn-big">
@@ -239,7 +237,8 @@
           <p id="scheda-sub" class="modal-subtitle"></p>
         </div>
         <div class="modal-header-actions">
-          <button id="scheda-print" class="btn btn-outline">🖨 Stampa scheda</button>
+          <button id="scheda-save-pdf" class="btn btn-outline">💾 Salva PDF</button>
+          <button id="scheda-print" class="btn btn-outline">🖨 Stampa</button>
           <button id="scheda-close" class="btn btn-icon">✖</button>
         </div>
       </div>
