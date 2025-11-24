@@ -19,26 +19,25 @@ let idCorrente = null;
 let immagineCorrenteData = "";
 
 // ============================
-// Gioco radiale da classe + diametro (NUOVA LOGICA)
+// Gioco radiale da classe + diametro
 // ============================
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
 
-  // Tutte le righe di quella classe nella tabella CSV
+  // filtra tutte le righe con quella classe nel CSV
   const righeClasse = tabellaGioco.filter(
     (r) => r.classe === classe && r.giocoMin != null && r.giocoMax != null
   );
 
-  // Se abbiamo righe per quella classe
+  // se abbiamo righe nel CSV
   if (righeClasse.length > 0) {
-    // Se il diametro è valido provo match d_min ≤ d ≤ d_max
+    // se ho un diametro valido provo a trovare la riga d_min <= d <= d_max
     if (diametro != null && !Number.isNaN(diametro)) {
       const match = righeClasse.find((r) => {
         const minOK = r.dMin == null || diametro >= r.dMin;
         const maxOK = r.dMax == null || diametro <= r.dMax;
         return minOK && maxOK;
       });
-
       if (match) {
         return {
           min: match.giocoMin,
@@ -47,7 +46,7 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
       }
     }
 
-    // Niente match preciso o diametro vuoto → media della classe
+    // se non trovo il match preciso (o d è vuoto) uso una media dei valori
     const sommaMin = righeClasse.reduce((s, r) => s + r.giocoMin, 0);
     const sommaMax = righeClasse.reduce((s, r) => s + r.giocoMax, 0);
     const avgMin = Math.round(sommaMin / righeClasse.length);
@@ -55,12 +54,13 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
     return { min: avgMin, max: avgMax };
   }
 
-  // Nessuna riga nel CSV → fallback generico se esiste
+  // nessuna riga nel CSV → fallback generico
   const base = CLASSI_GIOCO[classe];
   if (base) {
     return { min: base.min, max: base.max };
   }
 
+  // niente trovato
   return null;
 }
 
@@ -121,7 +121,7 @@ function nascondiForm() {
 }
 
 // ============================
-// Lista lavorazioni
+// Lista lavorazioni (cruscotto)
 // ============================
 function aggiornaConteggio() {
   const label = document.getElementById("conteggio-lavorazioni");
@@ -160,6 +160,7 @@ function renderLista() {
       riga.classList.add("active");
     }
 
+    // click → apre il form
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
@@ -366,13 +367,13 @@ function eliminaLavorazioneCorrente() {
 }
 
 // ============================
-// Aggiorna gioco quando cambia classe o diametro (NUOVA)
+// Classe gioco + diametro → min/max
 // ============================
 function aggiornaGiocoDaClasseEDiametro() {
   const classe = document.getElementById("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
 
-  // Se la classe è vuota → svuota i campi
+  // se non c'è classe azzero
   if (!classe) {
     document.getElementById("giocoMin").value = "";
     document.getElementById("giocoMax").value = "";
@@ -381,7 +382,7 @@ function aggiornaGiocoDaClasseEDiametro() {
 
   const result = trovaGiocoRadialeDaClasseEDiametro(classe, diametro);
 
-  // Se non trovo nessun valore → svuoto, così non rimane quello vecchio
+  // se non trovo niente azzero, così non resta il valore vecchio
   if (!result) {
     document.getElementById("giocoMin").value = "";
     document.getElementById("giocoMax").value = "";
@@ -754,9 +755,7 @@ function apriSchedaTecnica() {
       ? `${lav.pesoMin ?? "-"} – ${lav.pesoMax ?? "-"} g`
       : "-";
   document.getElementById("scheda-gioco").textContent =
-    lav.classeGioco ||
-    lav.giocoMin != null ||
-    lav.giocoMax != null
+    lav.classeGioco || lav.giocoMin != null || lav.giocoMax != null
       ? `${lav.classeGioco || ""} ${
           lav.giocoMin ?? "-"
         } – ${lav.giocoMax ?? "-"} µm`
@@ -784,7 +783,7 @@ function chiudiSchedaTecnica() {
 }
 
 // ============================
-// Carica tabella_gioco.csv e popola le classi
+// Carica tabella_gioco.csv e popola classi
 // ============================
 async function caricaTabellaGioco() {
   try {
@@ -959,13 +958,5 @@ document.addEventListener("DOMContentLoaded", () => {
       ) {
         chiudiSchedaTecnica();
       }
-    });
-
-  // 🔹 Bottone stampa scheda tecnica
-  document
-    .getElementById("scheda-print")
-    .addEventListener("click", (e) => {
-      e.stopPropagation();
-      window.print();
     });
 });
