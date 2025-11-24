@@ -37,7 +37,6 @@ body {
   flex-direction: column;
 }
 
-/* HEADER APP */
 .app-header {
   background: radial-gradient(circle at 0 0, #3b82f6, #1d4ed8 40%, #0f172a);
   color: #fff;
@@ -59,7 +58,6 @@ body {
   opacity: 0.9;
 }
 
-/* LAYOUT PRINCIPALE */
 .app-main {
   flex: 1;
   display: grid;
@@ -69,7 +67,7 @@ body {
   background: linear-gradient(135deg, #020617, #020617 40%, #0b1120);
 }
 
-/* PANELS */
+/* Panels */
 .panel {
   background: rgba(255, 255, 255, 0.97);
   border-radius: var(--radius-lg);
@@ -111,7 +109,6 @@ body {
   max-height: calc(100vh - 110px);
 }
 
-/* LISTA LAVORAZIONI */
 .lista-lavorazioni {
   flex: 1;
   overflow-y: auto;
@@ -121,7 +118,7 @@ body {
   padding: 6px;
 }
 
-/* Riga singola */
+/* Righe lavorazioni */
 .riga-lavorazione {
   display: flex;
   align-items: center;
@@ -166,7 +163,7 @@ body {
   gap: 4px;
 }
 
-/* BADGE */
+/* Badge */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -176,6 +173,7 @@ body {
   font-weight: 600;
   white-space: nowrap;
 }
+
 .badge-gioco {
   background: var(--accent-soft);
   color: #1d4ed8;
@@ -184,12 +182,13 @@ body {
   background: #e0fff4;
   color: #047857;
 }
+
 .badge-count {
   font-size: 0.8rem;
   color: var(--text-soft);
 }
 
-/* TOOLBAR */
+/* Toolbar */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -197,7 +196,7 @@ body {
   margin-top: 6px;
 }
 
-/* CARD FORM */
+/* Card-form */
 .card-form {
   height: 100%;
   display: flex;
@@ -220,7 +219,7 @@ body {
   color: var(--text-soft);
 }
 
-/* FORM */
+/* Form */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -244,7 +243,6 @@ body {
   color: var(--text-soft);
 }
 
-/* INPUT */
 .input {
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -260,7 +258,7 @@ body {
   background: #ffffff;
 }
 
-/* BUTTONS */
+/* Buttons */
 .btn {
   border-radius: 999px;
   border: none;
@@ -276,10 +274,7 @@ body {
     box-shadow 0.15s ease, color 0.15s;
   white-space: nowrap;
 }
-.btn-sm {
-  padding: 5px 10px;
-  font-size: 0.78rem;
-}
+
 .btn-big {
   width: 100%;
   padding: 10px 14px;
@@ -310,278 +305,4 @@ body {
   color: #111827;
 }
 .btn-light.full {
-  width: 100%;
-  margin-top: 4px;
-}
-
-.btn-danger {
-  background: var(--danger);
-  color: #fff;
-}
-.btn-danger:hover {
-  background: #c02626;
-}
-
-.btn-outline {
-  background: transparent;
-  color: #1d4ed8;
-  border-radius: 999px;
-  border: 1px solid #60a5fa;
-  padding: 6px 12px;
-}
-.btn-outline:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.btn-icon {
-  background: #e5e7eb;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-}
-
-/* ACTIONS FORM */
-.form-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-start;
-  margin-top: 4px;
-}
-
-/* PREVIEW DISEGNO */
-.drawing-preview {
-  border-radius: 16px;
-  border: 1px dashed #cbd5e1;
-  background: #f8fafc;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 120px;
-  overflow: hidden;
-}
-.drawing-preview.large {
-  min-height: 220px;
-}
-.drawing-preview img {
-  max-width: 100%;
-  max-height: 260px;
-  display: none;
-  object-fit: contain;
-}
-.drawing-placeholder {
-  font-size: 0.8rem;
-  color: var(--text-soft);
-}
-
-/* NOTE */
-.note-storage {
-  margin: 2px 0 0;
-  font-size: 0.75rem;
-  color: var(--text-soft);
-}
-
-/* HIDDEN */
-.is-hidden {
-  display: none;
-}
-
-/* MODALE SCHEDA TECNICA */
-.modal {
-  position: fixed;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-}
-.modal:not(.hidden) {
-  display: flex;
-}
-.modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.6);
-}
-.modal-content {
-  position: relative;
-  background: #ffffff;
-  border-radius: 18px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.55);
-  padding: 14px 16px 16px;
-  max-width: 720px;
-  width: min(95%, 720px);
-  max-height: 90vh;          /* altezza massima */
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;          /* niente overflow fuori dalla card */
-  z-index: 1;
-}
-}
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-.modal-subtitle {
-  margin: 2px 0 0;
-  font-size: 0.8rem;
-  color: var(--text-soft);
-}
-.modal-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.modal-body {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
-  gap: 14px;
-  flex: 1;              /* riempie lo spazio dentro il modal */
-  overflow-y: auto;     /* qui si attiva lo scroll verticale */
-}
-
-/* Colonna immagine a sinistra */
-.scheda-drawing {
-  display: flex;
-  align-items: flex-start;
-}
-
-/* Colonna dati a destra */
-.scheda-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 6px;
-  align-self: flex-start;
-}
-
-/* Sezioni dati */
-.scheda-section-title {
-  margin-top: 6px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.scheda-field {
-  display: flex;
-  flex-direction: column;
-  padding: 7px 9px;
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.95);
-  border-left: 3px solid #2563eb22;
-}
-.scheda-label {
-  font-size: 0.7rem;
-  color: var(--text-soft);
-}
-.scheda-value {
-  font-size: 0.9rem;
-  font-weight: 500;
-  margin-top: 2px;
-}
-
-/* RESPONSIVE */
-@media (max-width: 900px) {
-  .app-main {
-    grid-template-columns: 1fr;
-  }
-  .panel-left {
-    max-height: none;
-  }
-  .panel-right {
-    max-height: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  .modal-body {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ============================
-   STAMPA SCHEDA TECNICA
-   ============================ */
-@media print {
-  body {
-    background: #ffffff;
-  }
-
-  /* nascondo tutto */
-  body * {
-    visibility: hidden;
-  }
-
-  /* tranne la scheda tecnica */
-  #scheda-print-area,
-  #scheda-print-area * {
-    visibility: visible;
-  }
-
-  /* la scheda occupa tutta la pagina */
-  #scheda-print-area {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    box-shadow: none;
-    border-radius: 0;
-    max-width: 100%;
-    width: 100%;
-  }
-
-  .modal-backdrop,
-  #scheda-close,
-  #scheda-print {
-    display: none !important;
-  }
-
-  /* layout di stampa: colonna verticale */
-  .modal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  /* 1ª PAGINA: solo immagine
-     - altezza quasi piena pagina
-     - page-break dopo l'immagine */
-  .scheda-drawing {
-    page-break-after: always;
-    min-height: 85vh;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .scheda-drawing .drawing-preview.large {
-    min-height: 0;
-    height: auto;
-    border-radius: 0;
-    border: none;
-    padding: 0;
-  }
-
-  .scheda-drawing img {
-    display: block !important;
-    width: 100%;
-    max-height: 95vh;
-    object-fit: contain;
-  }
-
-  /* 2ª PAGINA: solo dati */
-  .scheda-grid {
-    page-break-after: auto;
-  }
-}
+  width: 100
