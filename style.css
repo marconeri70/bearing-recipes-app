@@ -440,10 +440,12 @@ body {
   gap: 8px;
 }
 .modal-body {
-  margin-top: 12px;
+  margin-top: 10px;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
-  gap: 18px;
+  gap: 14px;
+  flex: 1;              /* riempie lo spazio dentro il modal */
+  overflow-y: auto;     /* qui si attiva lo scroll verticale */
 }
 
 /* Colonna immagine a sinistra */
