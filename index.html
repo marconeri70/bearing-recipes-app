@@ -157,6 +157,7 @@
             <div class="form-group">
               <label for="classeGioco">Gioco radiale - Classe</label>
               <select id="classeGioco" class="input">
+                <!-- Riempita automaticamente da tabella_gioco.csv -->
                 <option value="">Seleziona classe…</option>
               </select>
             </div>
@@ -232,32 +233,17 @@
   <!-- MODALE SCHEDA TECNICA -->
   <div id="scheda-modal" class="modal hidden">
     <div class="modal-backdrop"></div>
-    <div class="modal-content" id="scheda-print-area">
+    <div class="modal-content">
       <div class="modal-header">
         <div>
           <h3 id="scheda-codice">Codice</h3>
           <p id="scheda-sub" class="modal-subtitle"></p>
         </div>
-        <div class="modal-header-actions">
-          <button id="scheda-print" class="btn btn-outline btn-sm">🖨️ Stampa scheda</button>
-          <button id="scheda-close" class="btn btn-icon">✖</button>
-        </div>
+        <button id="scheda-close" class="btn btn-icon">✖</button>
       </div>
 
       <div class="modal-body">
-        <!-- Disegno + dati: per la stampa la disposizione viene gestita dal CSS -->
-        <div class="scheda-drawing">
-          <div class="drawing-preview large">
-            <img id="scheda-drawing-image" alt="Disegno tecnico" />
-            <div id="scheda-drawing-placeholder" class="drawing-placeholder">
-              Nessuna immagine disponibile.
-            </div>
-          </div>
-        </div>
-
         <div class="scheda-grid">
-          <div class="scheda-section-title">Dati principali</div>
-
           <div class="scheda-field">
             <span class="scheda-label">IR - Tipo</span>
             <span id="scheda-ir" class="scheda-value">-</span>
@@ -270,9 +256,6 @@
             <span class="scheda-label">Diametro foro IR</span>
             <span id="scheda-ir-diametro" class="scheda-value">-</span>
           </div>
-
-          <div class="scheda-section-title">Rotolamento</div>
-
           <div class="scheda-field">
             <span class="scheda-label">Sfere</span>
             <span id="scheda-sfere" class="scheda-value">-</span>
@@ -281,9 +264,6 @@
             <span class="scheda-label">Gabbia</span>
             <span id="scheda-gabbia" class="scheda-value">-</span>
           </div>
-
-          <div class="scheda-section-title">Lubrificazione & schermatura</div>
-
           <div class="scheda-field">
             <span class="scheda-label">Grasso</span>
             <span id="scheda-grasso" class="scheda-value">-</span>
@@ -292,9 +272,6 @@
             <span class="scheda-label">Schermo / Tenuta</span>
             <span id="scheda-schermo" class="scheda-value">-</span>
           </div>
-
-          <div class="scheda-section-title">Peso & gioco</div>
-
           <div class="scheda-field">
             <span class="scheda-label">Peso</span>
             <span id="scheda-peso" class="scheda-value">-</span>
@@ -302,6 +279,15 @@
           <div class="scheda-field">
             <span class="scheda-label">Gioco radiale</span>
             <span id="scheda-gioco" class="scheda-value">-</span>
+          </div>
+        </div>
+
+        <div class="scheda-drawing">
+          <div class="drawing-preview large">
+            <img id="scheda-drawing-image" alt="Disegno tecnico" />
+            <div id="scheda-drawing-placeholder" class="drawing-placeholder">
+              Nessuna immagine disponibile.
+            </div>
           </div>
         </div>
       </div>
