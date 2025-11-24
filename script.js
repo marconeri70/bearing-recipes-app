@@ -617,7 +617,7 @@ function exportToPDF() {
 }
 
 // ============================
-// PDF singola scheda tecnica
+// PDF singola scheda tecnica (SALVA PDF)
 // ============================
 function stampaSchedaCorrente() {
   if (!idCorrente) return;
@@ -662,8 +662,8 @@ function stampaSchedaCorrente() {
     let format = "PNG";
     if (imgData.startsWith("data:image/jpeg")) format = "JPEG";
 
-    const imgWidth = 180; // mm
-    const imgHeight = 100; // mm (fisso, per semplicità)
+    const imgWidth = 180;
+    const imgHeight = 100;
 
     if (y + imgHeight > 287) {
       doc.addPage();
@@ -878,8 +878,6 @@ async function caricaTabellaGioco() {
       };
     });
 
-    console.log("Tabella gioco caricata:", tabellaGioco);
-
     const select = document.getElementById("classeGioco");
     if (select) {
       const classi = Array.from(
@@ -1017,7 +1015,13 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+  // Salva PDF della scheda
   document
-    .getElementById("scheda-print")
+    .getElementById("scheda-save-pdf")
     .addEventListener("click", stampaSchedaCorrente);
+
+  // Stampa (usa la stampa del browser)
+  document.getElementById("scheda-print").addEventListener("click", () => {
+    window.print();
+  });
 });
