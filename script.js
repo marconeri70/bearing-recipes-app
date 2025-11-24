@@ -24,14 +24,11 @@ let immagineCorrenteData = "";
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
 
-  // filtra tutte le righe con quella classe nel CSV
   const righeClasse = tabellaGioco.filter(
     (r) => r.classe === classe && r.giocoMin != null && r.giocoMax != null
   );
 
-  // se abbiamo righe nel CSV
   if (righeClasse.length > 0) {
-    // se ho un diametro valido provo a trovare la riga d_min <= d <= d_max
     if (diametro != null && !Number.isNaN(diametro)) {
       const match = righeClasse.find((r) => {
         const minOK = r.dMin == null || diametro >= r.dMin;
@@ -46,7 +43,6 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
       }
     }
 
-    // se non trovo il match preciso (o d è vuoto) uso una media dei valori
     const sommaMin = righeClasse.reduce((s, r) => s + r.giocoMin, 0);
     const sommaMax = righeClasse.reduce((s, r) => s + r.giocoMax, 0);
     const avgMin = Math.round(sommaMin / righeClasse.length);
@@ -54,13 +50,11 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
     return { min: avgMin, max: avgMax };
   }
 
-  // nessuna riga nel CSV → fallback generico
   const base = CLASSI_GIOCO[classe];
   if (base) {
     return { min: base.min, max: base.max };
   }
 
-  // niente trovato
   return null;
 }
 
@@ -127,7 +121,7 @@ function aggiornaConteggio() {
   const label = document.getElementById("conteggio-lavorazioni");
   if (!label) return;
   if (lavorazioni.length === 0) {
-    label.textContent = "Nessuna ricetta salvata";
+    label.textContent = "Nessuna lavorazione salvata";
   } else if (lavorazioni.length === 1) {
     label.textContent = "1 ricetta salvata";
   } else {
@@ -160,7 +154,6 @@ function renderLista() {
       riga.classList.add("active");
     }
 
-    // click → apre il form
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
@@ -373,7 +366,6 @@ function aggiornaGiocoDaClasseEDiametro() {
   const classe = document.getElementById("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
 
-  // se non c'è classe azzero
   if (!classe) {
     document.getElementById("giocoMin").value = "";
     document.getElementById("giocoMax").value = "";
@@ -382,7 +374,6 @@ function aggiornaGiocoDaClasseEDiametro() {
 
   const result = trovaGiocoRadialeDaClasseEDiametro(classe, diametro);
 
-  // se non trovo niente azzero, così non resta il valore vecchio
   if (!result) {
     document.getElementById("giocoMin").value = "";
     document.getElementById("giocoMax").value = "";
@@ -564,7 +555,7 @@ function importFromCSV(file) {
 }
 
 // ============================
-// Export PDF
+// Export PDF (tutte le lavorazioni)
 // ============================
 function exportToPDF() {
   if (lavorazioni.length === 0) {
@@ -623,6 +614,72 @@ function exportToPDF() {
   });
 
   doc.save("lavorazioni_cuscinetti.pdf");
+}
+
+// ============================
+// PDF singola scheda tecnica
+// ============================
+function stampaSchedaCorrente() {
+  if (!idCorrente) return;
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("Libreria PDF non disponibile.");
+    return;
+  }
+
+  const lav = lavorazioni.find((l) => l.id === idCorrente);
+  if (!lav) return;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF("p", "mm", "a4");
+
+  let y = 15;
+  doc.setFontSize(16);
+  doc.setFont(undefined, "bold");
+  doc.text(lav.codice || "(senza codice)", 10, y);
+  y += 6;
+
+  doc.setFontSize(10);
+  doc.setFont(undefined, "normal");
+
+  const line1 = `IR: ${lav.irTipo || "-"}  (d=${lav.irDiametro ?? "-"} mm)`;
+  const line2 = `OR: ${lav.orTipo || "-"}`;
+  const line3 = `Sfere: Ø ${lav.diametroSfera ?? "-"} mm   n=${lav.numeroSfere ?? "-"}`;
+  const line4 = `Gabbia: ${lav.gabbiaTipo || "-"}`;
+  const line5 = `Grasso: ${lav.grassoTipo || "-"}   Schermo: ${lav.schermoTipo || "-"}`;
+  const line6 = `Peso: ${lav.pesoMin ?? "-"}–${lav.pesoMax ?? "-"} g`;
+  const line7 = `Gioco radiale: ${lav.classeGioco || "-"}  ${
+    lav.giocoMin ?? "-"
+  }–${lav.giocoMax ?? "-"} µm`;
+
+  [line1, line2, line3, line4, line5, line6, line7].forEach((t) => {
+    doc.text(t, 10, y);
+    y += 6;
+  });
+
+  const imgData = lav.disegnoData;
+  if (imgData) {
+    let format = "PNG";
+    if (imgData.startsWith("data:image/jpeg")) format = "JPEG";
+
+    const imgWidth = 180; // mm
+    const imgHeight = 100; // mm (fisso, per semplicità)
+
+    if (y + imgHeight > 287) {
+      doc.addPage();
+      y = 15;
+    }
+
+    try {
+      doc.addImage(imgData, format, 10, y, imgWidth, imgHeight);
+    } catch (e) {
+      console.error("Errore addImage:", e);
+    }
+  }
+
+  const filename =
+    "scheda_" + (lav.codice ? lav.codice.replace(/[^\w\-]+/g, "_") : "lavorazione") + ".pdf";
+  doc.save(filename);
 }
 
 // ============================
@@ -959,4 +1016,8 @@ document.addEventListener("DOMContentLoaded", () => {
         chiudiSchedaTecnica();
       }
     });
+
+  document
+    .getElementById("scheda-print")
+    .addEventListener("click", stampaSchedaCorrente);
 });
