@@ -288,7 +288,7 @@ function caricaLavorazioneInForm(id) {
 }
 
 // ============================
-// Salvataggio form
+// Salvataggio form  ✅ SOLO URL, niente base64
 // ============================
 function gestisciSubmit(event) {
   event.preventDefault();
@@ -315,8 +315,10 @@ function gestisciSubmit(event) {
     classeGioco: document.getElementById("classeGioco").value || "",
     giocoMin: leggiNumero("giocoMin"),
     giocoMax: leggiNumero("giocoMax"),
+
+    // 🔸 SOLO URL, NON SALVIAMO l'immagine in base64 🔸
     disegnoUrl: document.getElementById("disegnoUrl").value.trim(),
-    disegnoData: immagineCorrenteData
+    disegnoData: ""   // sempre vuoto per le nuove ricette
   };
 
   const idx = lavorazioni.findIndex((l) => l.id === lav.id);
@@ -387,7 +389,7 @@ function aggiornaGiocoDaClasseEDiametro() {
 }
 
 // ============================
-// File disegno
+// File disegno (solo preview locale)
 // ============================
 function leggiFileDisegno(file) {
   if (!file) return;
@@ -657,7 +659,7 @@ function stampaSchedaCorrente() {
     y += 6;
   });
 
-  const imgData = lav.disegnoData;
+  const imgData = lav.disegnoData; // vecchie ricette potrebbero averlo
   if (imgData) {
     let format = "PNG";
     if (imgData.startsWith("data:image/jpeg")) format = "JPEG";
@@ -941,6 +943,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("disegnoUrl")
     .addEventListener("change", (e) => {
+      // Se NON c'è un'immagine locale, aggiorno la preview con l'URL
       if (!immagineCorrenteData) {
         aggiornaDisegnoPreview(e.target.value);
       }
