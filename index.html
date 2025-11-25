@@ -2,15 +2,15 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ricette Lavorazione Cuscinetti</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+  <!-- Stili -->
   <link rel="stylesheet" href="styles.css" />
 
-  <!-- jsPDF per PDF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- JSZip per ZIP (se vuoi usarlo in futuro) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- (opzionale) icone PWA -->
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
 </head>
 <body>
   <header class="app-header">
@@ -19,182 +19,217 @@
   </header>
 
   <main class="app-main">
-    <!-- CRUSCOTTO LAVORAZIONI -->
+    <!-- ================= CARD LAVORAZIONI ================= -->
     <section class="card card-lavorazioni">
       <div class="card-header">
         <div>
           <h2>Lavorazioni</h2>
-          <span id="conteggio-lavorazioni" class="sub"></span>
+          <span class="sub"><span id="recipes-count">0</span> ricette salvate</span>
         </div>
-        <button id="btn-nuova" class="btn btn-primary">+ Nuova</button>
+        <button id="btn-nuova" class="btn btn-primary">
+          ➕ Nuova
+        </button>
       </div>
 
       <div class="toolbar">
-        <button id="btn-import" class="btn btn-light">📥 Importa CSV</button>
-        <input id="file-import" type="file" accept=".csv" style="display:none" />
-
+        <label class="btn btn-light">
+          📥 Importa CSV
+          <input type="file" id="import-csv" accept=".csv,text/csv" style="display:none" />
+        </label>
         <button id="btn-export-csv" class="btn btn-light">📤 Esporta CSV</button>
-        <button id="btn-export-pdf" class="btn btn-light">🧾 Esporta PDF</button>
+        <button id="btn-export-pdf" class="btn btn-outline">📄 Esporta PDF</button>
       </div>
 
-      <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
+      <div id="lista-lavorazioni" class="lista-lavorazioni">
+        <!-- righe generate via JS -->
+      </div>
+      <p class="sub" style="margin-top:8px;">
+        Dati e immagini salvati solo sul dispositivo (localStorage).
+      </p>
     </section>
 
-    <!-- FORM DETTAGLIO -->
-    <section id="card-form" class="card card-dettaglio is-hidden">
+    <!-- ================= CARD DETTAGLIO ================= -->
+    <section class="card">
       <div class="card-header">
-        <h2>Dettaglio lavorazione</h2>
-        <span id="stato-modifica" class="badge badge-state">Nuova lavorazione</span>
-        <button id="btn-scheda-tecnica" class="btn btn-outline" disabled>📋 Scheda tecnica</button>
+        <div>
+          <h2>Dettaglio lavorazione</h2>
+          <span class="sub" id="edit-mode-label">Nuova lavorazione</span>
+        </div>
+        <button id="btn-scheda-tecnica" class="btn btn-outline">
+          📘 Scheda tecnica
+        </button>
       </div>
 
-      <form id="form-lavorazione" class="form">
+      <form id="recipe-form" class="form" autocomplete="off">
         <div class="form-row">
-          <label for="codice">Codice lavorazione *</label>
-          <input type="text" id="codice" required />
+          <label for="code">Codice lavorazione *</label>
+          <input type="text" id="code" required />
         </div>
 
         <div class="form-two-cols">
           <div class="form-row">
-            <label for="irTipo">IR - Tipo</label>
-            <input type="text" id="irTipo" />
+            <label for="ir-type">IR - Tipo</label>
+            <input type="text" id="ir-type" />
           </div>
           <div class="form-row">
-            <label for="irDiametro">Diametro foro IR (mm)</label>
-            <input type="number" id="irDiametro" step="0.001" />
+            <label for="ir-bore">Diametro foro IR (mm)</label>
+            <input type="number" id="ir-bore" step="0.001" min="0" />
           </div>
-        </div>
-
-        <div class="form-row">
-          <label for="orTipo">OR - Tipo</label>
-          <input type="text" id="orTipo" />
         </div>
 
         <div class="form-two-cols">
           <div class="form-row">
-            <label for="diametroSfera">Sfera - Diametro (mm)</label>
-            <input type="number" id="diametroSfera" step="0.001" />
+            <label for="or-type">OR - Tipo</label>
+            <input type="text" id="or-type" />
           </div>
           <div class="form-row">
-            <label for="numeroSfere">Sfera - Numero sfere (n)</label>
-            <input type="number" id="numeroSfere" />
+            <label for="ball-diameter">Sfera - Diametro (mm)</label>
+            <input type="number" id="ball-diameter" step="0.001" min="0" />
           </div>
-        </div>
-
-        <div class="form-row">
-          <label for="gabbiaTipo">Gabbia - Tipo</label>
-          <input type="text" id="gabbiaTipo" />
-        </div>
-
-        <div class="form-row">
-          <label for="grassoTipo">Grasso - Tipo</label>
-          <input type="text" id="grassoTipo" />
-        </div>
-
-        <div class="form-row">
-          <label for="schermoTipo">Schermo / Tenuta</label>
-          <input type="text" id="schermoTipo" />
         </div>
 
         <div class="form-two-cols">
           <div class="form-row">
-            <label for="pesoMin">Peso minimo (g)</label>
-            <input type="number" id="pesoMin" step="0.01" />
+            <label for="ball-count">Sfera - Numero sfere (n)</label>
+            <input type="number" id="ball-count" min="0" />
           </div>
           <div class="form-row">
-            <label for="pesoMax">Peso massimo (g)</label>
-            <input type="number" id="pesoMax" step="0.01" />
+            <label for="cage-type">Gabbia - Tipo</label>
+            <input type="text" id="cage-type" />
           </div>
         </div>
 
+        <div class="form-two-cols">
+          <div class="form-row">
+            <label for="grease-type">Grasso - Tipo</label>
+            <input type="text" id="grease-type" />
+          </div>
+          <div class="form-row">
+            <label for="seal-type">Schermo / Tenuta</label>
+            <input type="text" id="seal-type" />
+          </div>
+        </div>
+
+        <div class="form-two-cols">
+          <div class="form-row">
+            <label for="weight-min">Peso minimo (g)</label>
+            <input type="number" id="weight-min" step="0.01" min="0" />
+          </div>
+          <div class="form-row">
+            <label for="weight-max">Peso massimo (g)</label>
+            <input type="number" id="weight-max" step="0.01" min="0" />
+          </div>
+        </div>
+
+        <!-- Gioco radiale -->
         <div class="form-row">
-          <label for="classeGioco">Gioco radiale - Classe</label>
-          <select id="classeGioco">
+          <label for="clearance-class">Gioco radiale - Classe</label>
+          <select id="clearance-class">
             <option value="">Seleziona classe…</option>
+            <option value="C2">C2</option>
+            <option value="CN">CN</option>
+            <option value="C3">C3</option>
+            <option value="C4">C4</option>
+            <option value="C4H">C4H</option>
+            <option value="C5">C5</option>
+            <option value="C5H">C5H</option>
+            <!-- puoi aggiungere altre classi se presenti nel CSV -->
           </select>
         </div>
 
         <div class="form-two-cols">
           <div class="form-row">
-            <label for="giocoMin">Gioco min (µm)</label>
-            <input type="number" id="giocoMin" />
+            <label for="clearance-min">Gioco min (µm)</label>
+            <input type="number" id="clearance-min" step="0.1" />
           </div>
           <div class="form-row">
-            <label for="giocoMax">Gioco max (µm)</label>
-            <input type="number" id="giocoMax" />
+            <label for="clearance-max">Gioco max (µm)</label>
+            <input type="number" id="clearance-max" step="0.1" />
           </div>
         </div>
 
-        <hr />
+        <hr style="margin:10px 0;border:none;border-top:1px dashed #e5e7eb;" />
 
-        <h3>Carica disegno tecnico</h3>
+        <!-- Disegno tecnico -->
+        <h3 style="margin:0 0 4px;">Carica disegno tecnico</h3>
 
-        <div class="form-row">
-          <button type="button" id="btn-file-galleria" class="btn btn-light">📁 Scegli dalla galleria</button>
-          <input type="file" id="file-galleria" accept="image/*" style="display:none" />
+        <!-- input file nascosti -->
+        <input type="file" id="file-gallery" accept="image/*" style="display:none" />
+        <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" />
+
+        <div class="form-two-cols">
+          <button type="button" id="btn-gallery" class="btn btn-light">
+            📁 Scegli dalla galleria
+          </button>
+          <button type="button" id="btn-camera" class="btn btn-light">
+            📷 Scatta foto
+          </button>
         </div>
 
         <div class="form-row">
-          <button type="button" id="btn-file-camera" class="btn btn-light">📷 Scatta foto</button>
-          <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" />
-        </div>
-
-        <div class="form-row">
-          <label for="disegnoUrl">URL immagine (opzionale)</label>
-          <input type="url" id="disegnoUrl" placeholder="Incolla link immagine o Google Drive" />
-          <small class="hint">
+          <label for="image-url">URL immagine (opzionale)</label>
+          <input
+            type="url"
+            id="image-url"
+            style="width:100%; word-break:break-all;"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+          />
+          <p class="hint">
             Puoi incollare anche un link Google Drive tipo
             <code>https://drive.google.com/file/d/.../view</code>:
             l'app lo converte automaticamente.
-          </small>
+          </p>
         </div>
 
-        <div class="preview-box">
-          <img id="drawing-image" alt="Disegno tecnico" />
-          <div id="drawing-placeholder" class="placeholder">
-            Disegno tecnico (preview)
+        <div class="form-row">
+          <label>Disegno tecnico (preview)</label>
+          <div class="preview-box">
+            <span id="preview-placeholder" class="placeholder">Nessun disegno caricato</span>
+            <img id="preview-image" alt="Disegno tecnico" />
           </div>
         </div>
 
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">💾 Salva</button>
-          <button type="button" id="btn-reset" class="btn btn-light">🧹 Svuota</button>
-          <button type="button" id="btn-elimina" class="btn btn-danger" disabled>🗑️ Elimina</button>
+          <button type="submit" id="btn-save" class="btn btn-primary">💾 Salva</button>
+          <button type="button" id="btn-clear" class="btn btn-light">🧹 Svuota</button>
+          <button type="button" id="btn-delete" class="btn btn-danger">🗑️ Elimina</button>
         </div>
       </form>
     </section>
   </main>
 
-  <!-- MODALE SCHEDA TECNICA -->
-  <div id="scheda-modal" class="modal hidden">
+  <!-- ================= MODAL SCHEDA TECNICA ================= -->
+  <div id="modal-scheda" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop"></div>
     <div class="modal-content">
       <div class="modal-header">
         <div>
-          <h2 id="scheda-codice"></h2>
-          <p id="scheda-sub" class="sub"></p>
+          <h2 id="scheda-title">Scheda tecnica</h2>
+          <p id="scheda-subtitle" class="sub"></p>
         </div>
         <div class="modal-header-actions">
-          <button id="scheda-save-pdf" class="btn btn-light">💾 Salva PDF</button>
-          <button id="scheda-close" class="btn btn-icon">✖</button>
+          <button id="btn-print-scheda" class="btn btn-primary">💾 Salva PDF</button>
+          <button id="btn-close-scheda" class="btn-icon">✖</button>
         </div>
       </div>
-
       <div class="modal-body">
         <section class="scheda-section">
           <h3>Dati principali</h3>
           <div class="scheda-grid">
             <div class="scheda-item">
               <span class="label">IR - Tipo</span>
-              <span id="scheda-ir" class="value"></span>
+              <span class="value" id="scheda-ir"></span>
             </div>
             <div class="scheda-item">
               <span class="label">OR - Tipo</span>
-              <span id="scheda-or" class="value"></span>
+              <span class="value" id="scheda-or"></span>
             </div>
             <div class="scheda-item">
               <span class="label">Diametro foro IR</span>
-              <span id="scheda-ir-diametro" class="value"></span>
+              <span class="value" id="scheda-ir-bore"></span>
             </div>
           </div>
         </section>
@@ -204,11 +239,11 @@
           <div class="scheda-grid">
             <div class="scheda-item">
               <span class="label">Sfere</span>
-              <span id="scheda-sfere" class="value"></span>
+              <span class="value" id="scheda-sfere"></span>
             </div>
             <div class="scheda-item">
               <span class="label">Gabbia</span>
-              <span id="scheda-gabbia" class="value"></span>
+              <span class="value" id="scheda-gabbia"></span>
             </div>
           </div>
         </section>
@@ -218,11 +253,11 @@
           <div class="scheda-grid">
             <div class="scheda-item">
               <span class="label">Grasso</span>
-              <span id="scheda-grasso" class="value"></span>
+              <span class="value" id="scheda-grasso"></span>
             </div>
             <div class="scheda-item">
               <span class="label">Schermo / Tenuta</span>
-              <span id="scheda-schermo" class="value"></span>
+              <span class="value" id="scheda-schermo"></span>
             </div>
           </div>
         </section>
@@ -232,11 +267,11 @@
           <div class="scheda-grid">
             <div class="scheda-item">
               <span class="label">Peso</span>
-              <span id="scheda-peso" class="value"></span>
+              <span class="value" id="scheda-peso"></span>
             </div>
             <div class="scheda-item">
               <span class="label">Gioco radiale</span>
-              <span id="scheda-gioco" class="value"></span>
+              <span class="value" id="scheda-gioco"></span>
             </div>
           </div>
         </section>
@@ -244,16 +279,558 @@
         <section class="scheda-section">
           <h3>Disegno tecnico</h3>
           <div class="scheda-drawing-box">
-            <img id="scheda-drawing-image" alt="Disegno tecnico" />
-            <div id="scheda-drawing-placeholder" class="placeholder">
+            <span id="scheda-drawing-placeholder" class="placeholder">
               Nessun disegno caricato
-            </div>
+            </span>
+            <img id="scheda-drawing-img" alt="Disegno tecnico" />
           </div>
         </section>
       </div>
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <!-- ================= SCRIPT ================= -->
+  <script>
+    const STORAGE_KEY = 'bearing_recipes_v3';
+
+    let recipes = [];
+    let selectedIndex = -1;
+
+    const $ = (id) => document.getElementById(id);
+
+    const elements = {
+      list: $('lista-lavorazioni'),
+      count: $('recipes-count'),
+      form: $('recipe-form'),
+      editLabel: $('edit-mode-label'),
+      code: $('code'),
+      irType: $('ir-type'),
+      irBore: $('ir-bore'),
+      orType: $('or-type'),
+      ballDiameter: $('ball-diameter'),
+      ballCount: $('ball-count'),
+      cageType: $('cage-type'),
+      greaseType: $('grease-type'),
+      sealType: $('seal-type'),
+      weightMin: $('weight-min'),
+      weightMax: $('weight-max'),
+      clearanceClass: $('clearance-class'),
+      clearanceMin: $('clearance-min'),
+      clearanceMax: $('clearance-max'),
+      imageUrl: $('image-url'),
+      previewBox: $('preview-box'),
+      previewImg: $('preview-image'),
+      previewPlaceholder: $('preview-placeholder'),
+      btnNuova: $('btn-nuova'),
+      btnGallery: $('btn-gallery'),
+      btnCamera: $('btn-camera'),
+      fileGallery: $('file-gallery'),
+      fileCamera: $('file-camera'),
+      btnClear: $('btn-clear'),
+      btnDelete: $('btn-delete'),
+      btnExportCsv: $('btn-export-csv'),
+      btnExportPdf: $('btn-export-pdf'),
+      importCsv: $('import-csv'),
+      btnScheda: $('btn-scheda-tecnica'),
+      // modal
+      modal: $('modal-scheda'),
+      schedaTitle: $('scheda-title'),
+      schedaSubtitle: $('scheda-subtitle'),
+      schedaIr: $('scheda-ir'),
+      schedaOr: $('scheda-or'),
+      schedaIrBore: $('scheda-ir-bore'),
+      schedaSfere: $('scheda-sfere'),
+      schedaGabbia: $('scheda-gabbia'),
+      schedaGrasso: $('scheda-grasso'),
+      schedaSchermo: $('scheda-schermo'),
+      schedaPeso: $('scheda-peso'),
+      schedaGioco: $('scheda-gioco'),
+      schedaDrawingImg: $('scheda-drawing-img'),
+      schedaDrawingPlaceholder: $('scheda-drawing-placeholder'),
+      btnCloseScheda: $('btn-close-scheda'),
+      btnPrintScheda: $('btn-print-scheda')
+    };
+
+    // ======= Utilità =======
+
+    function normalizeDriveUrl(url) {
+      if (!url) return '';
+      url = url.trim();
+      const m = url.match(/https?:\/\/drive\.google\.com\/file\/d\/([^/]+)\//);
+      if (m) {
+        return 'https://drive.google.com/uc?export=view&id=' + m[1];
+      }
+      return url;
+    }
+
+    function getFormData() {
+      const imageUrlRaw = elements.imageUrl.value;
+      const imageUrl = normalizeDriveUrl(imageUrlRaw);
+
+      return {
+        code: elements.code.value.trim(),
+        irType: elements.irType.value.trim(),
+        irBore: elements.irBore.value ? Number(elements.irBore.value) : null,
+        orType: elements.orType.value.trim(),
+        ballDiameter: elements.ballDiameter.value ? Number(elements.ballDiameter.value) : null,
+        ballCount: elements.ballCount.value ? Number(elements.ballCount.value) : null,
+        cageType: elements.cageType.value.trim(),
+        greaseType: elements.greaseType.value.trim(),
+        sealType: elements.sealType.value.trim(),
+        weightMin: elements.weightMin.value ? Number(elements.weightMin.value) : null,
+        weightMax: elements.weightMax.value ? Number(elements.weightMax.value) : null,
+        clearanceClass: elements.clearanceClass.value,
+        clearanceMin: elements.clearanceMin.value ? Number(elements.clearanceMin.value) : null,
+        clearanceMax: elements.clearanceMax.value ? Number(elements.clearanceMax.value) : null,
+        imageUrl: imageUrl,
+        imageData: currentImageData || null
+      };
+    }
+
+    function setFormData(recipe) {
+      elements.code.value = recipe.code || '';
+      elements.irType.value = recipe.irType || '';
+      elements.irBore.value = recipe.irBore != null ? recipe.irBore : '';
+      elements.orType.value = recipe.orType || '';
+      elements.ballDiameter.value = recipe.ballDiameter != null ? recipe.ballDiameter : '';
+      elements.ballCount.value = recipe.ballCount != null ? recipe.ballCount : '';
+      elements.cageType.value = recipe.cageType || '';
+      elements.greaseType.value = recipe.greaseType || '';
+      elements.sealType.value = recipe.sealType || '';
+      elements.weightMin.value = recipe.weightMin != null ? recipe.weightMin : '';
+      elements.weightMax.value = recipe.weightMax != null ? recipe.weightMax : '';
+      elements.clearanceClass.value = recipe.clearanceClass || '';
+      elements.clearanceMin.value = recipe.clearanceMin != null ? recipe.clearanceMin : '';
+      elements.clearanceMax.value = recipe.clearanceMax != null ? recipe.clearanceMax : '';
+      elements.imageUrl.value = recipe.imageUrl || '';
+
+      currentImageData = recipe.imageData || null;
+      updatePreview(recipe.imageUrl, recipe.imageData);
+    }
+
+    function clearForm() {
+      elements.form.reset();
+      currentImageData = null;
+      updatePreview('', null);
+      selectedIndex = -1;
+      elements.editLabel.textContent = 'Nuova lavorazione';
+    }
+
+    function saveToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes));
+      elements.count.textContent = recipes.length;
+    }
+
+    function loadFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        recipes = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        recipes = [];
+      }
+      elements.count.textContent = recipes.length;
+    }
+
+    function renderList() {
+      elements.list.innerHTML = '';
+      if (!recipes.length) {
+        const p = document.createElement('p');
+        p.className = 'sub';
+        p.textContent = 'Nessuna ricetta salvata. Premi "Nuova" per crearne una.';
+        elements.list.appendChild(p);
+        return;
+      }
+
+      recipes.forEach((r, idx) => {
+        const row = document.createElement('div');
+        row.className = 'riga-lavorazione' + (idx === selectedIndex ? ' active' : '');
+        row.addEventListener('click', () => {
+          selectedIndex = idx;
+          setFormData(recipes[idx]);
+          elements.editLabel.textContent = 'Modifica lavorazione esistente';
+          renderList();
+        });
+
+        const info = document.createElement('div');
+        info.className = 'riga-lavorazione-info';
+        const codice = document.createElement('div');
+        codice.className = 'riga-codice';
+        codice.textContent = r.code || '(senza codice)';
+        const sub = document.createElement('div');
+        sub.className = 'riga-sub';
+        const parts = [];
+        if (r.irType) parts.push(r.irType);
+        if (r.orType) parts.push(r.orType);
+        if (r.irBore != null) parts.push('d=' + r.irBore + ' mm');
+        sub.textContent = parts.join(' | ') || 'Nessun dettaglio';
+
+        info.appendChild(codice);
+        info.appendChild(sub);
+
+        const actions = document.createElement('div');
+        actions.className = 'riga-actions';
+
+        const giocoSpan = document.createElement('span');
+        giocoSpan.className = 'badge badge-gioco';
+        if (r.clearanceClass) {
+          const gm = r.clearanceMin != null ? r.clearanceMin : '?';
+          const gM = r.clearanceMax != null ? r.clearanceMax : '?';
+          giocoSpan.textContent = r.clearanceClass + ' ' + gm + '–' + gM + ' µm';
+        } else {
+          giocoSpan.textContent = 'Gioco non impostato';
+        }
+
+        const disegnoSpan = document.createElement('span');
+        disegnoSpan.className = 'badge badge-disegno';
+        disegnoSpan.textContent = (r.imageUrl || r.imageData) ? 'Disegno' : 'Nessun disegno';
+
+        actions.appendChild(giocoSpan);
+        actions.appendChild(disegnoSpan);
+
+        row.appendChild(info);
+        row.appendChild(actions);
+        elements.list.appendChild(row);
+      });
+    }
+
+    // ======= Preview immagine =======
+
+    let currentImageData = null;
+
+    function updatePreview(url, data) {
+      const img = elements.previewImg;
+      const placeholder = elements.previewPlaceholder;
+
+      img.style.display = 'none';
+      placeholder.style.display = 'inline';
+
+      const src = data || (url && url.trim());
+      if (!src) {
+        placeholder.textContent = 'Nessun disegno caricato';
+        return;
+      }
+
+      img.onload = () => {
+        placeholder.style.display = 'none';
+        img.style.display = 'block';
+      };
+      img.onerror = () => {
+        placeholder.textContent = 'Immagine non disponibile';
+        placeholder.style.display = 'inline';
+        img.style.display = 'none';
+      };
+      img.src = src;
+    }
+
+    function handleFileInput(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        currentImageData = e.target.result;
+        updatePreview(elements.imageUrl.value, currentImageData);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ======= CSV (semplice) =======
+
+    function exportToCsv() {
+      if (!recipes.length) {
+        alert('Nessuna ricetta da esportare.');
+        return;
+      }
+      const header = [
+        'code','irType','irBore','orType',
+        'ballDiameter','ballCount','cageType','greaseType','sealType',
+        'weightMin','weightMax',
+        'clearanceClass','clearanceMin','clearanceMax',
+        'imageUrl'
+      ];
+
+      const rows = recipes.map(r => header.map(k => (r[k] ?? '')).join(';'));
+      const csv = [header.join(';'), ...rows].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ricette_cuscinetti.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function importFromCsv(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (!lines.length) return;
+        const header = lines[0].split(/;|,/);
+        const getIdx = (name) => header.indexOf(name);
+
+        const idx = {
+          code: getIdx('code'),
+          irType: getIdx('irType'),
+          irBore: getIdx('irBore'),
+          orType: getIdx('orType'),
+          ballDiameter: getIdx('ballDiameter'),
+          ballCount: getIdx('ballCount'),
+          cageType: getIdx('cageType'),
+          greaseType: getIdx('greaseType'),
+          sealType: getIdx('sealType'),
+          weightMin: getIdx('weightMin'),
+          weightMax: getIdx('weightMax'),
+          clearanceClass: getIdx('clearanceClass'),
+          clearanceMin: getIdx('clearanceMin'),
+          clearanceMax: getIdx('clearanceMax'),
+          imageUrl: getIdx('imageUrl')
+        };
+
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(/;|,/);
+          if (!cols.length) continue;
+          const rec = {
+            code: idx.code >= 0 ? cols[idx.code].trim() : '',
+            irType: idx.irType >= 0 ? cols[idx.irType].trim() : '',
+            irBore: idx.irBore >= 0 && cols[idx.irBore] ? Number(cols[idx.irBore]) : null,
+            orType: idx.orType >= 0 ? cols[idx.orType].trim() : '',
+            ballDiameter: idx.ballDiameter >= 0 && cols[idx.ballDiameter] ? Number(cols[idx.ballDiameter]) : null,
+            ballCount: idx.ballCount >= 0 && cols[idx.ballCount] ? Number(cols[idx.ballCount]) : null,
+            cageType: idx.cageType >= 0 ? cols[idx.cageType].trim() : '',
+            greaseType: idx.greaseType >= 0 ? cols[idx.greaseType].trim() : '',
+            sealType: idx.sealType >= 0 ? cols[idx.sealType].trim() : '',
+            weightMin: idx.weightMin >= 0 && cols[idx.weightMin] ? Number(cols[idx.weightMin]) : null,
+            weightMax: idx.weightMax >= 0 && cols[idx.weightMax] ? Number(cols[idx.weightMax]) : null,
+            clearanceClass: idx.clearanceClass >= 0 ? cols[idx.clearanceClass].trim() : '',
+            clearanceMin: idx.clearanceMin >= 0 && cols[idx.clearanceMin] ? Number(cols[idx.clearanceMin]) : null,
+            clearanceMax: idx.clearanceMax >= 0 && cols[idx.clearanceMax] ? Number(cols[idx.clearanceMax]) : null,
+            imageUrl: idx.imageUrl >= 0 ? normalizeDriveUrl(cols[idx.imageUrl].trim()) : '',
+            imageData: null
+          };
+          recipes.push(rec);
+        }
+        saveToStorage();
+        renderList();
+        if (recipes.length && selectedIndex === -1) {
+          selectedIndex = 0;
+          setFormData(recipes[0]);
+          elements.editLabel.textContent = 'Modifica lavorazione esistente';
+        }
+        alert('Import CSV completato.');
+      };
+      reader.readAsText(file);
+    }
+
+    // ======= Scheda tecnica =======
+
+    function openScheda() {
+      if (selectedIndex < 0 || !recipes[selectedIndex]) {
+        alert('Seleziona prima una lavorazione dalla lista.');
+        return;
+      }
+      const r = recipes[selectedIndex];
+
+      elements.schedaTitle.textContent = r.code || 'Scheda tecnica';
+      elements.schedaSubtitle.textContent =
+        'IR: ' + (r.irType || '-') + ' · OR: ' + (r.orType || '-');
+
+      elements.schedaIr.textContent = r.irType || '-';
+      elements.schedaOr.textContent = r.orType || '-';
+      elements.schedaIrBore.textContent = r.irBore != null ? r.irBore + ' mm' : '-';
+
+      elements.schedaSfere.textContent =
+        (r.ballDiameter != null ? 'Ø ' + r.ballDiameter + ' mm' : 'Ø -') +
+        ' · n=' + (r.ballCount != null ? r.ballCount : '-');
+
+      elements.schedaGabbia.textContent = r.cageType || '-';
+      elements.schedaGrasso.textContent = r.greaseType || '-';
+      elements.schedaSchermo.textContent = r.sealType || '-';
+
+      const pesoText =
+        (r.weightMin != null ? r.weightMin : '-') +
+        ' – ' +
+        (r.weightMax != null ? r.weightMax : '-') +
+        ' g';
+      elements.schedaPeso.textContent = pesoText;
+
+      const giocoText =
+        (r.clearanceClass || '-') +
+        ' ' +
+        (r.clearanceMin != null ? r.clearanceMin : '-') +
+        ' – ' +
+        (r.clearanceMax != null ? r.clearanceMax : '-') +
+        ' µm';
+      elements.schedaGioco.textContent = giocoText;
+
+      // Disegno
+      const url = r.imageUrl && r.imageUrl.trim();
+      const data = r.imageData || null;
+      const src = data || url;
+
+      elements.schedaDrawingImg.style.display = 'none';
+      elements.schedaDrawingPlaceholder.textContent = src
+        ? 'Caricamento disegno...'
+        : 'Nessun disegno caricato';
+
+      if (!src) {
+        elements.schedaDrawingImg.removeAttribute('src');
+      } else {
+        elements.schedaDrawingImg.onload = () => {
+          elements.schedaDrawingPlaceholder.style.display = 'none';
+          elements.schedaDrawingImg.style.display = 'block';
+        };
+        elements.schedaDrawingImg.onerror = () => {
+          elements.schedaDrawingPlaceholder.textContent = 'Immagine non disponibile';
+          elements.schedaDrawingPlaceholder.style.display = 'inline';
+          elements.schedaDrawingImg.style.display = 'none';
+        };
+        elements.schedaDrawingImg.src = src;
+        elements.schedaDrawingPlaceholder.style.display = 'inline';
+      }
+
+      elements.modal.classList.remove('hidden');
+      elements.modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeScheda() {
+      elements.modal.classList.add('hidden');
+      elements.modal.setAttribute('aria-hidden', 'true');
+    }
+
+    // stampa PDF (usa print del browser sulla modale)
+    function printScheda() {
+      const modalContent = document.querySelector('.modal-content');
+      if (!modalContent) return;
+
+      const win = window.open('', '_blank');
+      win.document.write('<html><head><title>' + elements.schedaTitle.textContent + '</title>');
+      win.document.write('<link rel="stylesheet" href="styles.css" />');
+      win.document.write('</head><body>');
+      win.document.write(modalContent.outerHTML);
+      win.document.write('</body></html>');
+      win.document.close();
+      win.focus();
+      win.print();
+    }
+
+    // ======= Eventi =======
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadFromStorage();
+      renderList();
+      if (recipes.length) {
+        selectedIndex = 0;
+        setFormData(recipes[0]);
+        elements.editLabel.textContent = 'Modifica lavorazione esistente';
+      }
+
+      elements.btnNuova.addEventListener('click', () => {
+        clearForm();
+        elements.code.focus();
+      });
+
+      elements.form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = getFormData();
+
+        if (!data.code) {
+          alert('Il codice lavorazione è obbligatorio.');
+          return;
+        }
+
+        if (data.imageUrl && data.imageUrl.length < 30) {
+          // URL troppo corto per essere un link valido
+          const proceed = confirm(
+            'L\'URL immagine sembra troppo corto. Vuoi salvarlo comunque?'
+          );
+          if (!proceed) return;
+        }
+
+        if (selectedIndex >= 0 && selectedIndex < recipes.length) {
+          recipes[selectedIndex] = { ...recipes[selectedIndex], ...data };
+        } else {
+          recipes.push(data);
+          selectedIndex = recipes.length - 1;
+        }
+
+        saveToStorage();
+        renderList();
+        elements.editLabel.textContent = 'Modifica lavorazione esistente';
+        alert('Lavorazione salvata.');
+      });
+
+      elements.btnClear.addEventListener('click', () => {
+        clearForm();
+      });
+
+      elements.btnDelete.addEventListener('click', () => {
+        if (selectedIndex < 0 || !recipes.length) {
+          alert('Nessuna lavorazione selezionata da eliminare.');
+          return;
+        }
+        const ok = confirm(
+          'Vuoi davvero eliminare la lavorazione "' + recipes[selectedIndex].code + '"?'
+        );
+        if (!ok) return;
+        recipes.splice(selectedIndex, 1);
+        saveToStorage();
+        selectedIndex = -1;
+        clearForm();
+        renderList();
+      });
+
+      elements.btnGallery.addEventListener('click', () => {
+        elements.fileGallery.click();
+      });
+
+      elements.btnCamera.addEventListener('click', () => {
+        elements.fileCamera.click();
+      });
+
+      elements.fileGallery.addEventListener('change', (e) => {
+        handleFileInput(e.target.files[0]);
+      });
+
+      elements.fileCamera.addEventListener('change', (e) => {
+        handleFileInput(e.target.files[0]);
+      });
+
+      elements.imageUrl.addEventListener('blur', () => {
+        const normalized = normalizeDriveUrl(elements.imageUrl.value);
+        if (normalized !== elements.imageUrl.value) {
+          elements.imageUrl.value = normalized;
+        }
+        updatePreview(elements.imageUrl.value, currentImageData);
+      });
+
+      elements.btnExportCsv.addEventListener('click', exportToCsv);
+
+      elements.importCsv.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) importFromCsv(file);
+        e.target.value = '';
+      });
+
+      elements.btnScheda.addEventListener('click', openScheda);
+      elements.btnCloseScheda.addEventListener('click', closeScheda);
+      elements.btnPrintScheda.addEventListener('click', printScheda);
+      elements.btnExportPdf.addEventListener('click', () => {
+        if (selectedIndex < 0 && recipes.length) {
+          selectedIndex = 0;
+        }
+        if (selectedIndex >= 0) {
+          openScheda();
+          setTimeout(printScheda, 200);
+        } else {
+          alert('Seleziona almeno una lavorazione per esportare la scheda.');
+        }
+      });
+
+      // click su backdrop per chiudere
+      document.querySelector('.modal-backdrop').addEventListener('click', closeScheda);
+    });
+  </script>
 </body>
 </html>
