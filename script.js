@@ -19,6 +19,26 @@ let idCorrente = null;
 let immagineCorrenteData = "";
 
 // ============================
+// Utility URL immagine (Google Drive ecc.)
+// ============================
+function normalizzaUrlImmagine(url) {
+  if (!url) return "";
+  let u = url.trim();
+  if (!u) return "";
+
+  // Link tipo: https://drive.google.com/file/d/ID/view?usp=sharing
+  const m = u.match(/https?:\/\/drive\.google\.com\/file\/d\/([^/]+)\//i);
+  if (m && m[1]) {
+    const id = m[1];
+    // Link diretto visualizzabile in <img>
+    return `https://drive.google.com/uc?export=view&id=${id}`;
+  }
+
+  // Altri link li lasciamo com'erano
+  return u;
+}
+
+// ============================
 // Gioco radiale da classe + diametro
 // ============================
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
@@ -88,8 +108,10 @@ function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
 
-  if (url && url.trim() !== "") {
-    img.src = url.trim();
+  const finalUrl = normalizzaUrlImmagine(url);
+
+  if (finalUrl) {
+    img.src = finalUrl;
     img.style.display = "block";
     placeholder.style.display = "none";
   } else {
@@ -276,7 +298,8 @@ function caricaLavorazioneInForm(id) {
 
   immagineCorrenteData = lav.disegnoData || "";
 
-  const sorgente = immagineCorrenteData || lav.disegnoUrl || "";
+  const sorgente =
+    immagineCorrenteData || normalizzaUrlImmagine(lav.disegnoUrl) || "";
   aggiornaDisegnoPreview(sorgente);
 
   document.getElementById("stato-modifica").textContent =
@@ -659,7 +682,7 @@ function stampaSchedaCorrente() {
     y += 6;
   });
 
-  const imgData = lav.disegnoData; // vecchie ricette potrebbero averlo
+  const imgData = lav.disegnoData;
   if (imgData) {
     let format = "PNG";
     if (imgData.startsWith("data:image/jpeg")) format = "JPEG";
@@ -822,7 +845,11 @@ function apriSchedaTecnica() {
 
   const img = document.getElementById("scheda-drawing-image");
   const ph = document.getElementById("scheda-drawing-placeholder");
-  const src = lav.disegnoData || lav.disegnoUrl || "";
+
+  const src =
+    lav.disegnoData ||
+    normalizzaUrlImmagine(lav.disegnoUrl) ||
+    "";
 
   if (src) {
     img.src = src;
@@ -943,7 +970,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("disegnoUrl")
     .addEventListener("change", (e) => {
-      // Se NON c'è un'immagine locale, aggiorno la preview con l'URL
       if (!immagineCorrenteData) {
         aggiornaDisegnoPreview(e.target.value);
       }
@@ -1018,12 +1044,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-  // Salva PDF della scheda
   document
     .getElementById("scheda-save-pdf")
     .addEventListener("click", stampaSchedaCorrente);
 
-  // Stampa (usa la stampa del browser)
   document.getElementById("scheda-print").addEventListener("click", () => {
     window.print();
   });
