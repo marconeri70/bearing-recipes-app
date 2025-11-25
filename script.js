@@ -6,10 +6,12 @@ const CLASSI_GIOCO = {
   CN: { min: 3, max: 18 },
   C3: { min: 13, max: 28 },
   C4: { min: 23, max: 43 },
-  C5: { min: 36, max: 61 }
+  C4H: { min: 30, max: 35 },
+  C5: { min: 36, max: 61 },
+  C5H: { min: 41, max: 71 }
 };
 
-// Tabella caricata da tabella_gioco.csv
+// Tabella caricata da tabella_gioco.csv (se presente)
 let tabellaGioco = [];
 
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
@@ -19,27 +21,32 @@ let idCorrente = null;
 let immagineCorrenteData = "";
 
 // ============================
-// Utility URL immagine (Google Drive ecc.)
+// 1. Normalizzazione URL immagine (Google Drive & co.)
 // ============================
 function normalizzaUrlImmagine(url) {
   if (!url) return "";
   let u = url.trim();
   if (!u) return "";
 
-  // Link tipo: https://drive.google.com/file/d/ID/view?usp=sharing
-  const m = u.match(/https?:\/\/drive\.google\.com\/file\/d\/([^/]+)\//i);
-  if (m && m[1]) {
-    const id = m[1];
-    // Link diretto visualizzabile in <img>
+  // Link tipo: https://drive.google.com/file/d/ID/view?usp=...
+  const matchFile = u.match(/https?:\/\/drive\.google\.com\/file\/d\/([^/]+)\//i);
+  if (matchFile && matchFile[1]) {
+    const id = matchFile[1];
     return `https://drive.google.com/uc?export=view&id=${id}`;
   }
 
-  // Altri link li lasciamo com'erano
+  // Link tipo: https://drive.google.com/open?id=ID
+  const matchOpen = u.match(/https?:\/\/drive\.google\.com\/open\?id=([^&]+)/i);
+  if (matchOpen && matchOpen[1]) {
+    const id = matchOpen[1];
+    return `https://drive.google.com/uc?export=view&id=${id}`;
+  }
+
   return u;
 }
 
 // ============================
-// Gioco radiale da classe + diametro
+// 2. Gioco radiale da classe + diametro
 // ============================
 function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
   if (!classe) return null;
@@ -79,7 +86,7 @@ function trovaGiocoRadialeDaClasseEDiametro(classe, diametro) {
 }
 
 // ============================
-// Storage
+// 3. Storage
 // ============================
 function salvaSuStorage() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
@@ -104,14 +111,15 @@ function generaId() {
   );
 }
 
+// ============================
+// 4. UI helpers
+// ============================
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
 
-  const finalUrl = normalizzaUrlImmagine(url);
-
-  if (finalUrl) {
-    img.src = finalUrl;
+  if (url) {
+    img.src = url;
     img.style.display = "block";
     placeholder.style.display = "none";
   } else {
@@ -127,17 +135,15 @@ function aggiornaStatoSchedaButton() {
 }
 
 function mostraForm() {
-  const card = document.getElementById("card-form");
-  if (card) card.classList.remove("is-hidden");
+  document.getElementById("card-form").classList.remove("is-hidden");
 }
 
 function nascondiForm() {
-  const card = document.getElementById("card-form");
-  if (card) card.classList.add("is-hidden");
+  document.getElementById("card-form").classList.add("is-hidden");
 }
 
 // ============================
-// Lista lavorazioni (cruscotto)
+// 5. Lista lavorazioni (cruscotto)
 // ============================
 function aggiornaConteggio() {
   const label = document.getElementById("conteggio-lavorazioni");
@@ -172,18 +178,14 @@ function renderLista() {
   lavorazioni.forEach((lav) => {
     const riga = document.createElement("div");
     riga.className = "riga-lavorazione";
-    if (lav.id === idCorrente) {
-      riga.classList.add("active");
-    }
+    if (lav.id === idCorrente) riga.classList.add("active");
 
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
       const card = document.getElementById("card-form");
-      if (card) {
-        const top = card.getBoundingClientRect().top + window.scrollY - 70;
-        window.scrollTo({ top, behavior: "smooth" });
-      }
+      const top = card.getBoundingClientRect().top + window.scrollY - 70;
+      window.scrollTo({ top, behavior: "smooth" });
     });
 
     const info = document.createElement("div");
@@ -219,10 +221,7 @@ function renderLista() {
       badge.appendChild(b);
     }
 
-    if (
-      (lav.disegnoData && lav.disegnoData !== "") ||
-      (lav.disegnoUrl && lav.disegnoUrl !== "")
-    ) {
+    if (lav.disegnoUrl || lav.disegnoData) {
       const d = document.createElement("span");
       d.className = "badge badge-disegno";
       d.textContent = "Disegno";
@@ -236,7 +235,7 @@ function renderLista() {
 }
 
 // ============================
-// Form: reset e carica
+// 6. Form: reset e carica
 // ============================
 function resetForm() {
   idCorrente = null;
@@ -275,6 +274,7 @@ function caricaLavorazioneInForm(id) {
   if (!lav) return;
 
   idCorrente = id;
+
   document.getElementById("codice").value = lav.codice || "";
   document.getElementById("irTipo").value = lav.irTipo || "";
   document.getElementById("irDiametro").value = lav.irDiametro ?? "";
@@ -298,8 +298,7 @@ function caricaLavorazioneInForm(id) {
 
   immagineCorrenteData = lav.disegnoData || "";
 
-  const sorgente =
-    immagineCorrenteData || normalizzaUrlImmagine(lav.disegnoUrl) || "";
+  const sorgente = immagineCorrenteData || lav.disegnoUrl || "";
   aggiornaDisegnoPreview(sorgente);
 
   document.getElementById("stato-modifica").textContent =
@@ -311,8 +310,17 @@ function caricaLavorazioneInForm(id) {
 }
 
 // ============================
-// Salvataggio form  ✅ SOLO URL, niente base64
+// 7. Salvataggio form
 // ============================
+function leggiNumero(id) {
+  const raw = document.getElementById(id).value;
+  if (raw === "" || raw === null || raw === undefined) return null;
+  const normalized = raw.replace(",", ".");
+  const n = Number(normalized);
+  if (Number.isNaN(n)) return null;
+  return n;
+}
+
 function gestisciSubmit(event) {
   event.preventDefault();
 
@@ -321,6 +329,10 @@ function gestisciSubmit(event) {
     alert("Inserisci il codice lavorazione (campo obbligatorio).");
     return;
   }
+
+  const urlInput = document.getElementById("disegnoUrl");
+  const urlNormalizzato = normalizzaUrlImmagine(urlInput.value);
+  urlInput.value = urlNormalizzato; // sovrascrivo il campo con il link corretto
 
   const lav = {
     id: idCorrente || generaId(),
@@ -338,18 +350,13 @@ function gestisciSubmit(event) {
     classeGioco: document.getElementById("classeGioco").value || "",
     giocoMin: leggiNumero("giocoMin"),
     giocoMax: leggiNumero("giocoMax"),
-
-    // 🔸 SOLO URL, NON SALVIAMO l'immagine in base64 🔸
-    disegnoUrl: document.getElementById("disegnoUrl").value.trim(),
-    disegnoData: ""   // sempre vuoto per le nuove ricette
+    disegnoUrl: urlNormalizzato,
+    disegnoData: immagineCorrenteData || ""
   };
 
   const idx = lavorazioni.findIndex((l) => l.id === lav.id);
-  if (idx >= 0) {
-    lavorazioni[idx] = lav;
-  } else {
-    lavorazioni.push(lav);
-  }
+  if (idx >= 0) lavorazioni[idx] = lav;
+  else lavorazioni.push(lav);
 
   salvaSuStorage();
   idCorrente = lav.id;
@@ -357,17 +364,8 @@ function gestisciSubmit(event) {
   nascondiForm();
 }
 
-function leggiNumero(id) {
-  const raw = document.getElementById(id).value;
-  if (raw === "" || raw === null || raw === undefined) return null;
-  const normalized = raw.replace(",", ".");
-  const n = Number(normalized);
-  if (Number.isNaN(n)) return null;
-  return n;
-}
-
 // ============================
-// Elimina
+// 8. Elimina
 // ============================
 function eliminaLavorazioneCorrente() {
   if (!idCorrente) return;
@@ -385,7 +383,7 @@ function eliminaLavorazioneCorrente() {
 }
 
 // ============================
-// Classe gioco + diametro → min/max
+// 9. Classe gioco + diametro → min/max
 // ============================
 function aggiornaGiocoDaClasseEDiametro() {
   const classe = document.getElementById("classeGioco").value;
@@ -412,7 +410,7 @@ function aggiornaGiocoDaClasseEDiametro() {
 }
 
 // ============================
-// File disegno (solo preview locale)
+// 10. Lettura file disegno (solo per PDF locale)
 // ============================
 function leggiFileDisegno(file) {
   if (!file) return;
@@ -426,7 +424,7 @@ function leggiFileDisegno(file) {
 }
 
 // ============================
-// Export CSV
+// 11. CSV export/import
 // ============================
 function escapeCSV(value) {
   if (value == null) return "";
@@ -458,7 +456,7 @@ function exportToCSV() {
     "classeGioco",
     "giocoMin",
     "giocoMax",
-    "disegnoPresente"
+    "disegnoUrl"
   ];
 
   const rows = lavorazioni.map((l) => [
@@ -476,7 +474,7 @@ function exportToCSV() {
     l.classeGioco || "",
     l.giocoMin ?? "",
     l.giocoMax ?? "",
-    (l.disegnoData || l.disegnoUrl) ? "SI" : ""
+    l.disegnoUrl || ""
   ]);
 
   let csv =
@@ -495,9 +493,13 @@ function exportToCSV() {
   URL.revokeObjectURL(url);
 }
 
-// ============================
-// Import CSV
-// ============================
+function toNumberOrNull(val) {
+  if (!val) return null;
+  const normalized = val.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isNaN(n) ? null : n;
+}
+
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length === 0) return [];
@@ -537,7 +539,7 @@ function parseCSV(text) {
       classeGioco: get("classeGioco"),
       giocoMin: toNumberOrNull(get("giocoMin")),
       giocoMax: toNumberOrNull(get("giocoMax")),
-      disegnoUrl: "",
+      disegnoUrl: normalizzaUrlImmagine(get("disegnoUrl")),
       disegnoData: ""
     };
 
@@ -545,13 +547,6 @@ function parseCSV(text) {
   }
 
   return records;
-}
-
-function toNumberOrNull(val) {
-  if (!val) return null;
-  const normalized = val.replace(",", ".");
-  const n = Number(normalized);
-  return Number.isNaN(n) ? null : n;
 }
 
 function importFromCSV(file) {
@@ -580,7 +575,7 @@ function importFromCSV(file) {
 }
 
 // ============================
-// Export PDF (tutte le lavorazioni)
+// 12. PDF tutte le ricette
 // ============================
 function exportToPDF() {
   if (lavorazioni.length === 0) {
@@ -642,7 +637,7 @@ function exportToPDF() {
 }
 
 // ============================
-// PDF singola scheda tecnica (SALVA PDF)
+// 13. PDF singola scheda tecnica
 // ============================
 function stampaSchedaCorrente() {
   if (!idCorrente) return;
@@ -708,105 +703,7 @@ function stampaSchedaCorrente() {
 }
 
 // ============================
-// Export ZIP (dati + immagini)
-// ============================
-async function exportZIP() {
-  if (lavorazioni.length === 0) {
-    alert("Nessuna lavorazione da esportare.");
-    return;
-  }
-  if (typeof JSZip === "undefined") {
-    alert("Libreria ZIP non disponibile.");
-    return;
-  }
-
-  const zip = new JSZip();
-
-  const dataStr = JSON.stringify(lavorazioni, null, 2);
-  zip.file("data.json", dataStr);
-
-  const imgFolder = zip.folder("disegni");
-
-  lavorazioni.forEach((lav) => {
-    if (!lav.disegnoData) return;
-
-    const dataUrl = lav.disegnoData;
-    const match = dataUrl.match(
-      /^data:(image\/[a-zA-Z0-9+.\-]+);base64,(.+)$/
-    );
-    if (!match) return;
-
-    const mime = match[1];
-    const base64 = match[2];
-
-    let ext = "png";
-    if (mime === "image/jpeg" || mime === "image/jpg") ext = "jpg";
-    else if (mime === "image/webp") ext = "webp";
-
-    const filename = (lav.id || generaId()) + "." + ext;
-    imgFolder.file(filename, base64, { base64: true });
-  });
-
-  const blob = await zip.generateAsync({ type: "blob" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "lavorazioni_export.zip";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-}
-
-// ============================
-// Import ZIP (dati + immagini)
-// ============================
-async function importZIP(file) {
-  if (!file) return;
-  if (typeof JSZip === "undefined") {
-    alert("Libreria ZIP non disponibile.");
-    return;
-  }
-
-  try {
-    const zip = await JSZip.loadAsync(file);
-    const dataFile = zip.file("data.json");
-    if (!dataFile) {
-      alert("File ZIP non valido: manca data.json");
-      return;
-    }
-
-    const jsonText = await dataFile.async("string");
-    let nuovi = JSON.parse(jsonText);
-    if (!Array.isArray(nuovi)) {
-      alert("Formato data.json non valido.");
-      return;
-    }
-
-    nuovi = nuovi.map((lav) => {
-      if (!lav.id) lav.id = generaId();
-      return lav;
-    });
-
-    if (
-      !confirm(
-        `Verranno aggiunte ${nuovi.length} lavorazioni a quelle esistenti. Continuare?`
-      )
-    ) {
-      return;
-    }
-
-    lavorazioni = lavorazioni.concat(nuovi);
-    salvaSuStorage();
-    renderLista();
-    alert("Import ZIP completato.");
-  } catch (e) {
-    console.error(e);
-    alert("Errore durante l'import ZIP.");
-  }
-}
-
-// ============================
-// Scheda tecnica (modale)
+// 14. Scheda tecnica (modale)
 // ============================
 function apriSchedaTecnica() {
   if (!idCorrente) return;
@@ -846,10 +743,7 @@ function apriSchedaTecnica() {
   const img = document.getElementById("scheda-drawing-image");
   const ph = document.getElementById("scheda-drawing-placeholder");
 
-  const src =
-    lav.disegnoData ||
-    normalizzaUrlImmagine(lav.disegnoUrl) ||
-    "";
+  const src = lav.disegnoData || lav.disegnoUrl || "";
 
   if (src) {
     img.src = src;
@@ -869,7 +763,7 @@ function chiudiSchedaTecnica() {
 }
 
 // ============================
-// Carica tabella_gioco.csv e popola classi
+// 15. Tabella gioco (da tabella_gioco.csv, opzionale)
 // ============================
 async function caricaTabellaGioco() {
   try {
@@ -932,7 +826,7 @@ async function caricaTabellaGioco() {
 }
 
 // ============================
-// Init
+// 16. Init
 // ============================
 document.addEventListener("DOMContentLoaded", () => {
   caricaTabellaGioco();
@@ -949,10 +843,8 @@ document.addEventListener("DOMContentLoaded", () => {
     resetForm();
     mostraForm();
     const card = document.getElementById("card-form");
-    if (card) {
-      const top = card.getBoundingClientRect().top + window.scrollY - 70;
-      window.scrollTo({ top, behavior: "smooth" });
-    }
+    const top = card.getBoundingClientRect().top + window.scrollY - 70;
+    window.scrollTo({ top, behavior: "smooth" });
   });
 
   document.getElementById("btn-reset").addEventListener("click", resetForm);
@@ -967,12 +859,13 @@ document.addEventListener("DOMContentLoaded", () => {
     .getElementById("irDiametro")
     .addEventListener("change", aggiornaGiocoDaClasseEDiametro);
 
+  // ✅ conversione automatica dei link Drive appena li incolli
   document
     .getElementById("disegnoUrl")
     .addEventListener("change", (e) => {
-      if (!immagineCorrenteData) {
-        aggiornaDisegnoPreview(e.target.value);
-      }
+      const norm = normalizzaUrlImmagine(e.target.value);
+      e.target.value = norm;
+      if (!immagineCorrenteData) aggiornaDisegnoPreview(norm);
     });
 
   document
@@ -1014,41 +907,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document
-    .getElementById("btn-export-zip")
-    .addEventListener("click", exportZIP);
-
-  const fileImportZip = document.getElementById("file-import-zip");
-  document.getElementById("btn-import-zip").addEventListener("click", () => {
-    fileImportZip.click();
-  });
-  fileImportZip.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) importZIP(file);
-    fileImportZip.value = "";
-  });
-
-  document
     .getElementById("btn-scheda-tecnica")
     .addEventListener("click", apriSchedaTecnica);
   document
     .getElementById("scheda-close")
     .addEventListener("click", chiudiSchedaTecnica);
   document
-    .getElementById("scheda-modal")
-    .addEventListener("click", (e) => {
-      if (
-        e.target.id === "scheda-modal" ||
-        e.target.classList.contains("modal-backdrop")
-      ) {
-        chiudiSchedaTecnica();
-      }
-    });
-
-  document
     .getElementById("scheda-save-pdf")
     .addEventListener("click", stampaSchedaCorrente);
-
-  document.getElementById("scheda-print").addEventListener("click", () => {
-    window.print();
-  });
 });
