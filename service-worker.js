@@ -1,34 +1,27 @@
-const CACHE_NAME = "ricette-cuscinetti-v1";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./script.js",
-  "./manifest.webmanifest",
-  "./icon-192.png",
-  "./icon-512.png"
-];
+// service-worker.js - Versione Killer/Reset
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+self.addEventListener('install', (e) => {
+  // Forza l'installazione immediata bypassando le code
+  self.skipWaiting(); 
+});
+
+self.addEventListener('activate', (e) => {
+  // Distrugge SPietatamente tutte le vecchie cache locali
+  e.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          console.log("[SYS] Eliminazione vecchia cache:", cacheName);
+          return caches.delete(cacheName);
+        })
+      );
+    }).then(() => {
+      return self.clients.claim();
+    })
   );
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k !== CACHE_NAME)
-          .map((k) => caches.delete(k))
-      )
-    )
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((res) => res || fetch(event.request))
-  );
+self.addEventListener('fetch', (e) => {
+  // Pass-through totale: ignora la cache e chiedi sempre alla rete
+  e.respondWith(fetch(e.request));
 });
