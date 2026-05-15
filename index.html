@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Terminale Ricette Lavorazione</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <title>Ricette Lavorazione Cuscinetti - Terminale di Linea</title>
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="theme-color" content="#050816" />
 </head>
 <body>
 
@@ -40,24 +46,129 @@
   </div>
 
   <div id="app-content" style="display: none;">
+    
     <header class="app-header">
       <h1>Ricette Lavorazione</h1>
-      <p id="operator-info-display">In attesa di login...</p>
+      <p id="operator-info-display">Identificazione in corso...</p>
     </header>
 
     <main class="app-main">
       <section class="card card-lavorazioni">
         <div class="card-header">
           <div>
-            <h2>Lavorazioni (Lotti SKF)</h2>
+            <h2>Lavorazioni</h2>
             <span class="sub"><span id="recipes-count">0</span> ricette approvate</span>
           </div>
           <button id="btn-nuova" class="btn btn-primary">➕ Nuova</button>
         </div>
-        </section>
+
+        <div class="toolbar">
+          <button id="btn-import" class="btn btn-light">📥 Importa CSV</button>
+          <input type="file" id="file-import" accept=".csv" style="display:none" />
+          <button id="btn-export-csv" class="btn btn-light">📤 Esporta CSV</button>
+        </div>
+
+        <div id="lista-lavorazioni" class="lista-container">
+          </div>
+      </section>
+
+      <section id="card-form" class="card card-form is-hidden">
+        <div class="card-header">
+          <h2 id="stato-modifica">Nuova lavorazione</h2>
+          <button id="btn-reset" class="btn btn-light">Annulla</button>
+        </div>
+
+        <form id="form-lavorazione">
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>Codice Lavorazione</label>
+              <input type="text" id="codice" placeholder="es. SKF-7204-C3" required />
+            </div>
+
+            <div class="form-group">
+              <label>IR Tipo</label>
+              <input type="text" id="irTipo" />
+            </div>
+            <div class="form-group">
+              <label>IR Diametro (mm)</label>
+              <input type="number" step="0.001" id="irDiametro" />
+            </div>
+            <div class="form-group">
+              <label>OR Tipo</label>
+              <input type="text" id="orTipo" />
+            </div>
+            <div class="form-group">
+              <label>Diametro Sfera</label>
+              <input type="number" step="0.001" id="diametroSfera" />
+            </div>
+            <div class="form-group">
+              <label>Numero Sfere</label>
+              <input type="number" id="numeroSfere" />
+            </div>
+            <div class="form-group">
+              <label>Tipo Gabbia</label>
+              <input type="text" id="gabbiaTipo" />
+            </div>
+
+            <div class="form-group">
+              <label>Tipo Grasso</label>
+              <input type="text" id="grassoTipo" />
+            </div>
+            <div class="form-group">
+              <label>Tipo Schermo</label>
+              <input type="text" id="schermoTipo" />
+            </div>
+            <div class="form-group">
+              <label>Peso Min (g)</label>
+              <input type="number" step="0.1" id="pesoMin" />
+            </div>
+            <div class="form-group">
+              <label>Peso Max (g)</label>
+              <input type="number" step="0.1" id="pesoMax" />
+            </div>
+
+            <div class="form-group">
+              <label>Classe Gioco</label>
+              <select id="classeGioco">
+                <option value="">Caricamento...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Gioco Min (µm)</label>
+              <input type="number" id="giocoMin" />
+            </div>
+            <div class="form-group">
+              <label>Gioco Max (µm)</label>
+              <input type="number" id="giocoMax" />
+            </div>
+          </div>
+
+          <div class="form-group full drawing-section">
+            <label>Disegno Tecnico / Foto</label>
+            <div class="drawing-controls">
+              <input type="text" id="disegnoUrl" placeholder="URL Disegno (Drive, Dropbox...)" />
+              <button type="button" id="btn-file-galleria" class="btn btn-light">🖼️ Galleria</button>
+              <input type="file" id="file-galleria" accept="image/*" style="display:none" />
+            </div>
+            <div class="drawing-preview">
+              <img id="drawing-image" src="" alt="Anteprima disegno" style="display:none;" />
+              <div id="drawing-placeholder">Nessun disegno caricato</div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" id="btn-elimina" class="btn btn-danger" disabled>Elimina</button>
+            <button type="button" id="btn-scheda-tecnica" class="btn btn-light" disabled>📄 Scheda</button>
+            <button type="submit" class="btn btn-primary">Salva Ricetta</button>
+          </div>
+        </form>
+      </section>
     </main>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <script type="module" src="js/main.js"></script>
+
 </body>
 </html>
