@@ -10,7 +10,6 @@ import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js
 // ==========================================
 // 2. STATO LOCALE DELL'APPLICAZIONE
 // ==========================================
-// NOTA: Questo storage locale è temporaneo. Verrà sostituito da Firebase Firestore
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
@@ -51,7 +50,7 @@ function leggiNumero(id) {
 }
 
 // ==========================================
-// 4. GESTIONE INTERFACCIA (DOM)
+// 4. GESTIONE INTERFACCIA (DOM) E RENDERING
 // ==========================================
 function mostraForm() {
   document.getElementById("card-form").classList.remove("is-hidden");
@@ -81,7 +80,7 @@ function aggiornaDisegnoPreview(url) {
 }
 
 function aggiornaConteggio() {
-  const label = document.getElementById("recipes-count"); // Aggiornato per Kiosk UI
+  const label = document.getElementById("recipes-count");
   if (label) label.textContent = lavorazioni.length;
 }
 
@@ -93,9 +92,11 @@ function renderLista() {
 
   if (lavorazioni.length === 0) {
     container.innerHTML = `<div class="riga-lavorazione" style="cursor: default;">
-      <div class="riga-lavorazione-info">
-        <span class="riga-codice">Nessuna lavorazione salvata</span>
-        <span class="riga-sub">Premi "Nuova" o importa un CSV.</span>
+      <div class="riga-left-content">
+        <div class="riga-lavorazione-info">
+          <span class="riga-codice">Nessuna lavorazione salvata</span>
+          <span class="riga-sub">Premi "Nuova" o importa un CSV.</span>
+        </div>
       </div>
     </div>`;
     return;
@@ -112,6 +113,18 @@ function renderLista() {
       const card = document.getElementById("card-form");
       window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
     });
+
+    // Blocco Sinistro: Miniatura e Testi
+    const leftContent = document.createElement("div");
+    leftContent.className = "riga-left-content";
+
+    if (lav.disegnoData || lav.disegnoUrl) {
+      const thumb = document.createElement("img");
+      thumb.className = "riga-thumb";
+      thumb.src = lav.disegnoData || lav.disegnoUrl;
+      thumb.alt = "Disegno";
+      leftContent.appendChild(thumb);
+    }
 
     const info = document.createElement("div");
     info.className = "riga-lavorazione-info";
@@ -130,8 +143,10 @@ function renderLista() {
     sub.textContent = parts.join(" · ");
 
     info.append(codice, sub);
-    riga.appendChild(info);
+    leftContent.appendChild(info);
+    riga.appendChild(leftContent);
 
+    // Blocco Destro: Badge Tolleranza
     const badgeContainer = document.createElement("div");
     badgeContainer.className = "riga-actions";
 
@@ -140,13 +155,6 @@ function renderLista() {
       b.className = "badge badge-gioco";
       b.textContent = `${lav.classeGioco} ${lav.giocoMin ?? "?"}–${lav.giocoMax ?? "?"} µm`;
       badgeContainer.appendChild(b);
-    }
-
-    if (lav.disegnoUrl || lav.disegnoData) {
-      const d = document.createElement("span");
-      d.className = "badge badge-disegno";
-      d.textContent = "Disegno";
-      badgeContainer.appendChild(d);
     }
 
     riga.appendChild(badgeContainer);
@@ -241,7 +249,7 @@ function aggiornaGiocoIntegrato() {
   const classe = document.getElementById("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
   
-  const tolleranza = calcolaTolleranze(classe, diametro); // Chiamata al modulo esterno
+  const tolleranza = calcolaTolleranze(classe, diametro);
   
   if (tolleranza) {
     document.getElementById("giocoMin").value = tolleranza.min ?? "";
@@ -258,10 +266,8 @@ function aggiornaGiocoIntegrato() {
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("[SYS] Avvio Orchestratore...");
 
-  // 1. Avvia Sicurezza Kiosk
   initKioskAuth();
 
-  // 2. Carica configurazione tabelle e popola la UI
   const classiDisponibili = await inizializzaTabellaGioco("tabella_gioco.csv");
   const selectClasse = document.getElementById("classeGioco");
   if (selectClasse && classiDisponibili.length > 0) {
@@ -274,13 +280,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 3. Carica i dati locali
   lavorazioni = caricaDaStorage();
   renderLista();
   resetForm();
   nascondiForm();
 
-  // 4. Binding Eventi Core
   document.getElementById("form-lavorazione").addEventListener("submit", gestisciSubmit);
   
   const btnNuova = document.getElementById("btn-nuova");
@@ -300,11 +304,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     resetForm(); nascondiForm(); renderLista();
   });
 
-  // 5. Binding Logica Tolleranze
   document.getElementById("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
   document.getElementById("irDiametro").addEventListener("change", aggiornaGiocoIntegrato);
 
-  // 6. Binding Immagini
   document.getElementById("disegnoUrl").addEventListener("change", (e) => {
     e.target.value = normalizzaUrlImmagine(e.target.value);
     if (!immagineCorrenteData) aggiornaDisegnoPreview(e.target.value);
@@ -324,7 +326,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-file-galleria").addEventListener("click", () => document.getElementById("file-galleria").click());
   document.getElementById("file-galleria").addEventListener("change", fileHandler);
 
-  // 7. Binding CSV Export/Import (Delegato)
   document.getElementById("btn-export-csv").addEventListener("click", () => {
     if (lavorazioni.length === 0) return alert("Nessuna lavorazione da esportare.");
     esportaLavorazioniInCSV(lavorazioni);
@@ -348,8 +349,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     fileImport.value = "";
   });
 
-  // NOTA: Le funzioni di Export PDF (stampaSchedaCorrente, exportToPDF) e la Modale (apriSchedaTecnica) 
-  // andranno spostate in un file `api/pdf-manager.js` nel prossimo step.
-  // Per mantenere l'operatività al 100% ora, le mantieni funzionanti se inietti window.jspdf
   document.getElementById("btn-scheda-tecnica").addEventListener("click", () => alert("Visualizzazione scheda tecnica attivata (Modalità temporanea)"));
 });
