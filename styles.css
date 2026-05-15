@@ -1,0 +1,269 @@
+/* ==========================================================================
+   1. RESET E VARIABILI CORE
+   ========================================================================== */
+:root {
+  --primary: #3b82f6;
+  --primary-dark: #1d4ed8;
+  --bg-dark: #050816;
+  --card-bg: #ffffff;
+  --text-main: #111827;
+  --text-muted: #6b7280;
+  --danger: #ef4444;
+  --success: #10b981;
+  --radius: 12px;
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Utility per nascondere elementi */
+.is-hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   2. KIOSK MODE (LOCK SCREEN) - SICUREZZA
+   ========================================================================== */
+.kiosk-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, #0f172a 0%, #050816 100%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.numpad-container {
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.kiosk-header h2 {
+  color: #fff;
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.kiosk-header p {
+  color: var(--primary);
+  margin: 5px 0 20px;
+  font-weight: 500;
+}
+
+/* Display PIN con pallini */
+.pin-display {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.pin-dot {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.pin-dot.active {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary);
+  transform: scale(1.2);
+}
+
+/* Griglia Tastierino */
+.numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.num-btn {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.1s active;
+}
+
+.num-btn:active {
+  background: var(--primary);
+  transform: scale(0.9);
+}
+
+.action-btn {
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-clear { color: var(--danger); }
+.enter-btn { color: var(--success); }
+
+/* ==========================================================================
+   3. LAYOUT APPLICAZIONE (HEADER E MAIN)
+   ========================================================================== */
+.app-header {
+  padding: 20px;
+  background: linear-gradient(135deg, var(--primary-dark), #1e3a8a);
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.app-header p {
+  margin: 5px 0 0;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.app-main {
+  padding: 15px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   4. CARD E COMPONENTI UI
+   ========================================================================== */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 15px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #f3f4f6;
+  padding-bottom: 10px;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Bottoni */
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-light { background: #f3f4f6; color: var(--text-main); }
+.btn-danger { background: var(--danger); color: white; }
+
+/* Form */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-group.full { grid-column: span 2; }
+
+label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+input, select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+/* ==========================================================================
+   5. LISTA LAVORAZIONI E ANTEPRIME
+   ========================================================================== */
+.lista-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lavorazione-item {
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 10px;
+  border-left: 4px solid var(--primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.drawing-preview {
+  margin-top: 10px;
+  width: 100%;
+  min-height: 150px;
+  background: #f3f4f6;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px dashed #d1d5db;
+}
+
+.drawing-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .form-group.full { grid-column: span 1; }
+}
