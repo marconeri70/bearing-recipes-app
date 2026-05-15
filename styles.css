@@ -29,7 +29,6 @@ body {
   overflow-x: hidden;
 }
 
-/* Utility per nascondere elementi */
 .is-hidden {
   display: none !important;
 }
@@ -69,7 +68,6 @@ body {
   font-weight: 500;
 }
 
-/* Display PIN con pallini */
 .pin-display {
   display: flex;
   justify-content: center;
@@ -92,7 +90,6 @@ body {
   transform: scale(1.2);
 }
 
-/* Griglia Tastierino */
 .numpad-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -181,7 +178,6 @@ body {
   color: var(--text-muted);
 }
 
-/* Bottoni */
 .btn {
   padding: 8px 16px;
   border-radius: 8px;
@@ -197,7 +193,6 @@ body {
 .btn-light { background: #f3f4f6; color: var(--text-main); }
 .btn-danger { background: var(--danger); color: white; }
 
-/* Form */
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -224,7 +219,7 @@ input, select {
 }
 
 /* ==========================================================================
-   5. LISTA LAVORAZIONI E ANTEPRIME
+   5. LISTA LAVORAZIONI E ANTEPRIME (AGGIORNATO CON GRIGLIA FLEX)
    ========================================================================== */
 .lista-container {
   display: flex;
@@ -232,7 +227,7 @@ input, select {
   gap: 10px;
 }
 
-.lavorazione-item {
+.riga-lavorazione {
   padding: 12px;
   background: #f9fafb;
   border-radius: 10px;
@@ -241,6 +236,73 @@ input, select {
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
+  gap: 10px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.riga-lavorazione:hover {
+  background: #f3f4f6;
+}
+
+.riga-lavorazione.active {
+  background: #eff6ff;
+  border-left-color: var(--primary-dark);
+}
+
+.riga-left-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.riga-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #e5e7eb;
+  flex-shrink: 0;
+  border: 1px solid #d1d5db;
+}
+
+.riga-lavorazione-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.riga-codice {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.riga-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.riga-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.badge-gioco {
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .drawing-preview {
@@ -262,7 +324,9 @@ input, select {
   object-fit: contain;
 }
 
-/* Responsive */
+/* ==========================================================================
+   6. RESPONSIVE
+   ========================================================================== */
 @media (max-width: 480px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-group.full { grid-column: span 1; }
