@@ -469,7 +469,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       } catch (error) {
         alert("Errore estrazione dati: " + error.message);
-      } final {
+      } finally {
         btnAi.textContent = textOriginale;
         btnAi.disabled = false;
       }
