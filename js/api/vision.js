@@ -13,8 +13,8 @@ export async function analizzaScheda(base64Image) {
   const base64Data = base64Image.split(',')[1];
   const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
-  // CORREZIONE CHIRURGICA: Rimosso "-latest". L'URL ora punta al modello stabile.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // AGGIORNAMENTO MOTORE: Il vecchio 1.5 è dismesso. Connessione stabilita con la nuova generazione 2.5 Flash.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const prompt = `
 Sei un ingegnere meccanico. Estrai i parametri tecnici da questa scheda di cuscinetti.
@@ -66,7 +66,7 @@ Se un dato non è presente nell'immagine o non sei sicuro, imposta il valore a n
     if (!response.ok) {
       const errorDetails = await response.text();
       console.error("[SYS] Errore API Google Dettagliato:", errorDetails);
-      throw new Error(`Errore Server API: ${response.status}. Premi F12 e guarda la Console per i dettagli.`);
+      throw new Error(`Errore Server API: ${response.status}. Motivo: ${errorDetails}`);
     }
 
     const data = await response.json();
