@@ -6,6 +6,7 @@
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
+import { analizzaScheda } from './api/vision.js';
 
 // ==========================================
 // 2. STATO LOCALE DELL'APPLICAZIONE
