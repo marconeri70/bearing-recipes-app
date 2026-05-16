@@ -6,7 +6,7 @@
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
-import { analizzaScheda } from './api/vision.js';
+import { analizzaScheda } from './api/vision.js'; // NUOVO: Motore IA
 
 // ==========================================
 // 2. STATO LOCALE DELL'APPLICAZIONE
@@ -46,6 +46,7 @@ function caricaDaStorage() {
 function leggiNumero(id) {
   const raw = document.getElementById(id).value;
   if (!raw) return null;
+  // Converte la virgola inserita dall'operatore in punto per i calcoli JS
   const n = Number(raw.replace(",", "."));
   return Number.isNaN(n) ? null : n;
 }
@@ -69,14 +70,19 @@ function aggiornaStatoSchedaButton() {
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
+  const btnAi = document.getElementById("btn-ai-extract"); // Gestione visibilità Tasto IA
+
   if (url) {
     img.src = url;
     img.style.display = "block";
     placeholder.style.display = "none";
+    // Mostra il tasto IA solo se abbiamo dati base64 da inviare
+    if (immagineCorrenteData && btnAi) btnAi.classList.remove("is-hidden");
   } else {
     img.src = "";
     img.style.display = "none";
     placeholder.style.display = "block";
+    if (btnAi) btnAi.classList.add("is-hidden");
   }
 }
 
@@ -138,7 +144,7 @@ function renderLista() {
     sub.className = "riga-sub";
     const parts = [
       [lav.irTipo, lav.orTipo].filter(Boolean).join(" | "),
-      lav.irDiametro != null ? `d=${lav.irDiametro} mm` : "",
+      lav.irDiametro != null ? `d=${lav.irDiametro.toString().replace('.', ',')} mm` : "",
       lav.classeGioco && lav.giocoMin != null ? `Gioco ${lav.classeGioco}: ${lav.giocoMin}–${lav.giocoMax} µm` : ""
     ].filter(Boolean);
     sub.textContent = parts.join(" · ");
@@ -182,18 +188,18 @@ function caricaLavorazioneInForm(id) {
   idCorrente = id;
   document.getElementById("codice").value = lav.codice || "";
   document.getElementById("irTipo").value = lav.irTipo || "";
-  document.getElementById("irDiametro").value = lav.irDiametro ?? "";
+  document.getElementById("irDiametro").value = lav.irDiametro !== null ? lav.irDiametro.toString().replace('.', ',') : "";
   document.getElementById("orTipo").value = lav.orTipo || "";
-  document.getElementById("diametroSfera").value = lav.diametroSfera ?? "";
+  document.getElementById("diametroSfera").value = lav.diametroSfera !== null ? lav.diametroSfera.toString().replace('.', ',') : "";
   document.getElementById("numeroSfere").value = lav.numeroSfere ?? "";
   document.getElementById("gabbiaTipo").value = lav.gabbiaTipo || "";
   document.getElementById("grassoTipo").value = lav.grassoTipo || "";
   document.getElementById("schermoTipo").value = lav.schermoTipo || "";
-  document.getElementById("pesoMin").value = lav.pesoMin ?? "";
-  document.getElementById("pesoMax").value = lav.pesoMax ?? "";
+  document.getElementById("pesoMin").value = lav.pesoMin !== null ? lav.pesoMin.toString().replace('.', ',') : "";
+  document.getElementById("pesoMax").value = lav.pesoMax !== null ? lav.pesoMax.toString().replace('.', ',') : "";
   document.getElementById("classeGioco").value = lav.classeGioco || "";
-  document.getElementById("giocoMin").value = lav.giocoMin ?? "";
-  document.getElementById("giocoMax").value = lav.giocoMax ?? "";
+  document.getElementById("giocoMin").value = lav.giocoMin !== null ? lav.giocoMin.toString().replace('.', ',') : "";
+  document.getElementById("giocoMax").value = lav.giocoMax !== null ? lav.giocoMax.toString().replace('.', ',') : "";
   document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
 
   immagineCorrenteData = lav.disegnoData || "";
@@ -253,8 +259,8 @@ function aggiornaGiocoIntegrato() {
   const tolleranza = calcolaTolleranze(classe, diametro);
   
   if (tolleranza) {
-    document.getElementById("giocoMin").value = tolleranza.min ?? "";
-    document.getElementById("giocoMax").value = tolleranza.max ?? "";
+    document.getElementById("giocoMin").value = tolleranza.min !== null ? tolleranza.min.toString().replace('.', ',') : "";
+    document.getElementById("giocoMax").value = tolleranza.max !== null ? tolleranza.max.toString().replace('.', ',') : "";
   } else {
     document.getElementById("giocoMin").value = "";
     document.getElementById("giocoMax").value = "";
@@ -351,4 +357,63 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("btn-scheda-tecnica").addEventListener("click", () => alert("Visualizzazione scheda tecnica attivata (Modalità temporanea)"));
+
+  // ==========================================
+  // 7. BINDING INTELLIGENZA ARTIFICIALE (VISION)
+  // ==========================================
+  const btnAi = document.getElementById("btn-ai-extract");
+  if (btnAi) {
+    btnAi.addEventListener("click", async () => {
+      if (!immagineCorrenteData) return alert("Carica prima un'immagine.");
+      
+      const textOriginale = btnAi.textContent;
+      btnAi.textContent = "⏳ Analisi in corso...";
+      btnAi.disabled = true;
+
+      try {
+        const datiEstratti = await analizzaScheda(immagineCorrenteData);
+        console.log("[SYS] Dati IA estratti:", datiEstratti);
+
+        const mapCampi = {
+          "codice": datiEstratti.codice,
+          "irTipo": datiEstratti.irTipo,
+          "irDiametro": datiEstratti.irDiametro,
+          "orTipo": datiEstratti.orTipo,
+          "diametroSfera": datiEstratti.diametroSfera,
+          "numeroSfere": datiEstratti.numeroSfere,
+          "gabbiaTipo": datiEstratti.gabbiaTipo,
+          "grassoTipo": datiEstratti.grassoTipo,
+          "schermoTipo": datiEstratti.schermoTipo,
+          "pesoMin": datiEstratti.pesoMin,
+          "pesoMax": datiEstratti.pesoMax,
+          "classeGioco": datiEstratti.classeGioco
+        };
+
+        for (const [idCampo, valore] of Object.entries(mapCampi)) {
+          if (valore !== null && valore !== undefined) {
+            const el = document.getElementById(idCampo);
+            if (el) {
+              // Convertiamo il punto in virgola per l'interfaccia utente
+              el.value = typeof valore === 'number' ? valore.toString().replace('.', ',') : valore;
+              // Evidenziazione visiva dell'automazione (Human-in-the-Loop)
+              el.style.backgroundColor = "#e0f2fe"; 
+              el.style.transition = "background-color 0.5s";
+              setTimeout(() => el.style.backgroundColor = "", 3000);
+            }
+          }
+        }
+        
+        // Se ha trovato Classe e Diametro, ricalcola i giochi istantaneamente
+        if (datiEstratti.classeGioco && datiEstratti.irDiametro) {
+           aggiornaGiocoIntegrato();
+        }
+
+      } catch (error) {
+        alert("Errore estrazione dati: " + error.message);
+      } finally {
+        btnAi.textContent = textOriginale;
+        btnAi.disabled = false;
+      }
+    });
+  }
 });
