@@ -4,15 +4,18 @@
 const GEMINI_API_KEY = "AIzaSyBdvQDBipxvoZq7Cy_hoSQ3R9bNJanL5rA"; 
 
 export async function analizzaScheda(base64Image) {
-  // Nuovo sistema di sicurezza blindato: controlla solo che la chiave sia reale (più di 30 caratteri)
-  if (!GEMINI_API_KEY || GEMINI_API_KEY.length < 30) {
+  // Pulizia chirurgica di eventuali spazi invisibili o "a capo" copiati per errore
+  const apiKey = GEMINI_API_KEY.trim();
+  
+  if (!apiKey || apiKey.length < 30) {
     throw new Error("API Key mancante o non valida. Verifica il file vision.js.");
   }
 
   const base64Data = base64Image.split(',')[1];
   const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // Puntiamo esplicitamente alla versione "latest" del motore flash
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
   const prompt = `
 Sei un ingegnere meccanico. Estrai i parametri tecnici da questa scheda di cuscinetti.
@@ -61,11 +64,17 @@ Se un dato non è presente nell'immagine o non sei sicuro, imposta il valore a n
       body: JSON.stringify(requestBody)
     });
 
-    if (!response.ok) throw new Error(`Errore Server API: ${response.status}`);
+    // Se il server risponde picche, estraiamo il VERO motivo
+    if (!response.ok) {
+      const errorDetails = await response.text();
+      console.error("[SYS] Errore API Google Dettagliato:", errorDetails);
+      throw new Error(`Errore Server API: ${response.status}. Premi F12 e guarda la Console per i dettagli.`);
+    }
 
     const data = await response.json();
     let rawText = data.candidates[0].content.parts[0].text;
     
+    // Pulizia del JSON
     rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     
     return JSON.parse(rawText);
