@@ -6,18 +6,20 @@
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
-import { analizzaScheda } from './api/vision.js'; // NUOVO: Motore IA
+import { analizzaScheda } from './api/vision.js';
+// Nuova connessione al database Cloud Centralizzato
+import { db, collection, getDocs, doc, setDoc, deleteDoc } from './api/firebase-config.js';
 
 // ==========================================
-// 2. STATO LOCALE DELL'APPLICAZIONE
+// 2. STATO GLOBALE DELL'APPLICAZIONE
 // ==========================================
-const STORAGE_KEY = "bearing_recipes_lavorazioni";
+const COLLECTION_NAME = "ricette_lavorazione"; // Nome della collezione su Firestore
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
 
 // ==========================================
-// 3. FUNZIONI DI UTILITÀ E STORAGE
+// 3. FUNZIONI DI UTILITÀ E ARCHIVIAZIONE CLOUD
 // ==========================================
 function generaId() {
   return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8);
@@ -34,21 +36,51 @@ function normalizzaUrlImmagine(url) {
   return u;
 }
 
-function salvaSuStorage() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
-}
-
-function caricaDaStorage() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : [];
-}
-
 function leggiNumero(id) {
   const raw = document.getElementById(id).value;
   if (!raw) return null;
-  // Converte la virgola inserita dall'operatore in punto per i calcoli JS
   const n = Number(raw.replace(",", "."));
   return Number.isNaN(n) ? null : n;
+}
+
+// --- Operazioni CRUD asincrone su Firebase Firestore ---
+
+async function caricaDaFirestore() {
+  try {
+    console.log("[SYS] Richiesta dati a Firestore...");
+    const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
+    const dati = [];
+    querySnapshot.forEach((doc) => {
+      dati.push({ id: doc.id, ...doc.data() });
+    });
+    return dati;
+  } catch (error) {
+    console.error("[SYS] Errore critico nel download dal Cloud:", error);
+    alert("Errore di sincronizzazione: impossibile scaricare i dati dal Cloud. Verifica la rete di linea.");
+    return [];
+  }
+}
+
+async function salvaSuFirestore(lav) {
+  try {
+    const docRef = doc(db, COLLECTION_NAME, lav.id);
+    // setDoc sovrascrive se esiste (modifica) o crea se è nuovo
+    await setDoc(docRef, lav);
+    console.log(`[SYS] Documento ${lav.id} sincronizzato nel Cloud.`);
+  } catch (error) {
+    console.error("[SYS] Errore critico nel salvataggio Cloud:", error);
+    throw new Error("Sincronizzazione fallita. La ricetta NON è stata salvata nel database centrale.");
+  }
+}
+
+async function eliminaDaFirestore(id) {
+  try {
+    await deleteDoc(doc(db, COLLECTION_NAME, id));
+    console.log(`[SYS] Documento ${id} rimosso dal Cloud.`);
+  } catch (error) {
+    console.error("[SYS] Errore critico nella rimozione Cloud:", error);
+    throw new Error("Cancellazione fallita sul database centrale.");
+  }
 }
 
 // ==========================================
@@ -70,13 +102,12 @@ function aggiornaStatoSchedaButton() {
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
-  const btnAi = document.getElementById("btn-ai-extract"); // Gestione visibilità Tasto IA
+  const btnAi = document.getElementById("btn-ai-extract");
 
   if (url) {
     img.src = url;
     img.style.display = "block";
     placeholder.style.display = "none";
-    // Mostra il tasto IA solo se abbiamo dati base64 da inviare
     if (immagineCorrenteData && btnAi) btnAi.classList.remove("is-hidden");
   } else {
     img.src = "";
@@ -121,7 +152,6 @@ function renderLista() {
       window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
     });
 
-    // Blocco Sinistro: Miniatura e Testi
     const leftContent = document.createElement("div");
     leftContent.className = "riga-left-content";
 
@@ -153,7 +183,6 @@ function renderLista() {
     leftContent.appendChild(info);
     riga.appendChild(leftContent);
 
-    // Blocco Destro: Badge Tolleranza
     const badgeContainer = document.createElement("div");
     badgeContainer.className = "riga-actions";
 
@@ -212,9 +241,9 @@ function caricaLavorazioneInForm(id) {
 }
 
 // ==========================================
-// 5. DELEGAZIONE LOGICA DI BUSINESS
+// 5. DELEGAZIONE LOGICA DI BUSINESS ASINCRONA
 // ==========================================
-function gestisciSubmit(event) {
+async function gestisciSubmit(event) {
   event.preventDefault();
   const codice = document.getElementById("codice").value.trim();
   if (!codice) return alert("Inserisci il codice lavorazione (campo obbligatorio).");
@@ -222,6 +251,12 @@ function gestisciSubmit(event) {
   const urlInput = document.getElementById("disegnoUrl");
   const urlNormalizzato = normalizzaUrlImmagine(urlInput.value);
   urlInput.value = urlNormalizzato;
+
+  // Blocco dell'interfaccia durante il salvataggio remoto
+  const btnSubmit = event.target.querySelector('button[type="submit"]');
+  const textOriginale = btnSubmit.textContent;
+  btnSubmit.textContent = "⏳ Sincronizzazione...";
+  btnSubmit.disabled = true;
 
   const lav = {
     id: idCorrente || generaId(),
@@ -243,20 +278,30 @@ function gestisciSubmit(event) {
     disegnoData: immagineCorrenteData || ""
   };
 
-  const idx = lavorazioni.findIndex((l) => l.id === lav.id);
-  if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
+  try {
+    // Invia i dati a Firestore nel Cloud
+    await salvaSuFirestore(lav);
+    
+    // Aggiorna lo stato della memoria locale se e solo se la rete ha risposto OK
+    const idx = lavorazioni.findIndex((l) => l.id === lav.id);
+    if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
 
-  salvaSuStorage();
-  idCorrente = lav.id;
-  renderLista();
-  nascondiForm();
+    idCorrente = lav.id;
+    renderLista();
+    nascondiForm();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btnSubmit.textContent = textOriginale;
+    btnSubmit.disabled = false;
+  }
 }
 
 function aggiornaGiocoIntegrato() {
-  const classe = document.getElementById("classeGioco").value;
+  const classVal = document.getElementById("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
   
-  const tolleranza = calcolaTolleranze(classe, diametro);
+  const tolleranza = calcolaTolleranze(classVal, diametro);
   
   if (tolleranza) {
     document.getElementById("giocoMin").value = tolleranza.min !== null ? tolleranza.min.toString().replace('.', ',') : "";
@@ -271,7 +316,7 @@ function aggiornaGiocoIntegrato() {
 // 6. INIT E BINDING DEGLI EVENTI
 // ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("[SYS] Avvio Orchestratore...");
+  console.log("[SYS] Avvio Orchestratore Cloud-Linked...");
 
   initKioskAuth();
 
@@ -287,7 +332,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  lavorazioni = caricaDaStorage();
+  // DOWNLOAD DIRETTO DAL CLOUD AL BOOT
+  lavorazioni = await caricaDaFirestore();
   renderLista();
   resetForm();
   nascondiForm();
@@ -304,11 +350,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   document.getElementById("btn-reset").addEventListener("click", resetForm);
-  document.getElementById("btn-elimina").addEventListener("click", () => {
-    if (!idCorrente || !confirm("Vuoi davvero eliminare questa lavorazione?")) return;
-    lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
-    salvaSuStorage();
-    resetForm(); nascondiForm(); renderLista();
+  
+  document.getElementById("btn-elimina").addEventListener("click", async () => {
+    if (!idCorrente || !confirm("Vuoi davvero eliminare questa lavorazione dal Cloud centralizzato?")) return;
+    
+    const btnElimina = document.getElementById("btn-elimina");
+    btnElimina.disabled = true;
+    
+    try {
+      await eliminaDaFirestore(idCorrente);
+      lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
+      resetForm(); nascondiForm(); renderLista();
+    } catch (err) {
+      alert(err.message);
+      btnElimina.disabled = false;
+    }
   });
 
   document.getElementById("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
@@ -344,11 +400,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         try {
           const nuovi = analizzaImportCSV(ev.target.result, generaId, normalizzaUrlImmagine);
+          
+          // Ciclo di sincronizzazione massiva nel cloud per ogni file importato
+          for (const nuovo of nuovi) {
+            await salvaSuFirestore(nuovo);
+          }
+          
           lavorazioni = lavorazioni.concat(nuovi);
-          salvaSuStorage(); renderLista(); alert("Importazione completata.");
+          salvaSuStorage(); renderLista(); alert("Importazione e sincronizzazione Cloud completate.");
         } catch(err) { alert("Errore importazione CSV: " + err.message); }
       };
       reader.readAsText(file, "utf-8");
@@ -393,9 +455,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (valore !== null && valore !== undefined) {
             const el = document.getElementById(idCampo);
             if (el) {
-              // Convertiamo il punto in virgola per l'interfaccia utente
               el.value = typeof valore === 'number' ? valore.toString().replace('.', ',') : valore;
-              // Evidenziazione visiva dell'automazione (Human-in-the-Loop)
               el.style.backgroundColor = "#e0f2fe"; 
               el.style.transition = "background-color 0.5s";
               setTimeout(() => el.style.backgroundColor = "", 3000);
@@ -403,14 +463,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
         }
         
-        // Se ha trovato Classe e Diametro, ricalcola i giochi istantaneamente
         if (datiEstratti.classeGioco && datiEstratti.irDiametro) {
            aggiornaGiocoIntegrato();
         }
 
       } catch (error) {
         alert("Errore estrazione dati: " + error.message);
-      } finally {
+      } final {
         btnAi.textContent = textOriginale;
         btnAi.disabled = false;
       }
