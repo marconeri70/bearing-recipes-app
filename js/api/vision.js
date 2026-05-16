@@ -2,10 +2,10 @@
 
 // ATTENZIONE: Per il test in produzione, inserisci qui la tua API Key temporanea.
 // In architettura finale, questo sarà sostituito dal Cloudflare Worker.
-const GEMINI_API_KEY = "INSERISCI_QUI_LA_TUA_API_KEY"; 
+const GEMINI_API_KEY = "AIzaSyBdvQDBipxvoZq7Cy_hoSQ3R9bNJanL5rA"; 
 
 export async function analizzaScheda(base64Image) {
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === "INSERISCI_QUI_LA_TUA_API_KEY") {
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyBdvQDBipxvoZq7Cy_hoSQ3R9bNJanL5rA") {
     throw new Error("API Key mancante. Generala su Google AI Studio.");
   }
 
