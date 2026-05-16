@@ -7,13 +7,12 @@ import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
 import { analizzaScheda } from './api/vision.js';
-// Nuova connessione al database Cloud Centralizzato
 import { db, collection, getDocs, doc, setDoc, deleteDoc } from './api/firebase-config.js';
 
 // ==========================================
 // 2. STATO GLOBALE DELL'APPLICAZIONE
 // ==========================================
-const COLLECTION_NAME = "ricette_lavorazione"; // Nome della collezione su Firestore
+const COLLECTION_NAME = "ricette_lavorazione";
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
@@ -64,7 +63,6 @@ async function caricaDaFirestore() {
 async function salvaSuFirestore(lav) {
   try {
     const docRef = doc(db, COLLECTION_NAME, lav.id);
-    // setDoc sovrascrive se esiste (modifica) o crea se è nuovo
     await setDoc(docRef, lav);
     console.log(`[SYS] Documento ${lav.id} sincronizzato nel Cloud.`);
   } catch (error) {
@@ -252,7 +250,6 @@ async function gestisciSubmit(event) {
   const urlNormalizzato = normalizzaUrlImmagine(urlInput.value);
   urlInput.value = urlNormalizzato;
 
-  // Blocco dell'interfaccia durante il salvataggio remoto
   const btnSubmit = event.target.querySelector('button[type="submit"]');
   const textOriginale = btnSubmit.textContent;
   btnSubmit.textContent = "⏳ Sincronizzazione...";
@@ -279,10 +276,8 @@ async function gestisciSubmit(event) {
   };
 
   try {
-    // Invia i dati a Firestore nel Cloud
     await salvaSuFirestore(lav);
     
-    // Aggiorna lo stato della memoria locale se e solo se la rete ha risposto OK
     const idx = lavorazioni.findIndex((l) => l.id === lav.id);
     if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
 
@@ -332,7 +327,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // DOWNLOAD DIRETTO DAL CLOUD AL BOOT
   lavorazioni = await caricaDaFirestore();
   renderLista();
   resetForm();
@@ -404,13 +398,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
           const nuovi = analizzaImportCSV(ev.target.result, generaId, normalizzaUrlImmagine);
           
-          // Ciclo di sincronizzazione massiva nel cloud per ogni file importato
           for (const nuovo of nuovi) {
             await salvaSuFirestore(nuovo);
           }
           
           lavorazioni = lavorazioni.concat(nuovi);
-          salvaSuStorage(); renderLista(); alert("Importazione e sincronizzazione Cloud completate.");
+          renderLista(); 
+          alert("Importazione e sincronizzazione Cloud completate.");
         } catch(err) { alert("Errore importazione CSV: " + err.message); }
       };
       reader.readAsText(file, "utf-8");
