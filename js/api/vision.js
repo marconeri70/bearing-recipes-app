@@ -4,7 +4,6 @@
 const GEMINI_API_KEY = "AIzaSyBdvQDBipxvoZq7Cy_hoSQ3R9bNJanL5rA"; 
 
 export async function analizzaScheda(base64Image) {
-  // Pulizia chirurgica di eventuali spazi invisibili o "a capo" copiati per errore
   const apiKey = GEMINI_API_KEY.trim();
   
   if (!apiKey || apiKey.length < 30) {
@@ -14,8 +13,8 @@ export async function analizzaScheda(base64Image) {
   const base64Data = base64Image.split(',')[1];
   const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
-  // Puntiamo esplicitamente alla versione "latest" del motore flash
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+  // CORREZIONE CHIRURGICA: Rimosso "-latest". L'URL ora punta al modello stabile.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const prompt = `
 Sei un ingegnere meccanico. Estrai i parametri tecnici da questa scheda di cuscinetti.
@@ -64,7 +63,6 @@ Se un dato non è presente nell'immagine o non sei sicuro, imposta il valore a n
       body: JSON.stringify(requestBody)
     });
 
-    // Se il server risponde picche, estraiamo il VERO motivo
     if (!response.ok) {
       const errorDetails = await response.text();
       console.error("[SYS] Errore API Google Dettagliato:", errorDetails);
@@ -74,7 +72,6 @@ Se un dato non è presente nell'immagine o non sei sicuro, imposta il valore a n
     const data = await response.json();
     let rawText = data.candidates[0].content.parts[0].text;
     
-    // Pulizia del JSON
     rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     
     return JSON.parse(rawText);
