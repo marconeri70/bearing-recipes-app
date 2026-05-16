@@ -1,21 +1,19 @@
 // js/api/vision.js
 
-// ATTENZIONE: Per il test in produzione, inserisci qui la tua API Key temporanea.
-// In architettura finale, questo sarà sostituito dal Cloudflare Worker.
+// INSERISCI LA TUA VERA CHIAVE QUI SOTTO (Mantenendo le virgolette)
 const GEMINI_API_KEY = "AIzaSyBdvQDBipxvoZq7Cy_hoSQ3R9bNJanL5rA"; 
 
 export async function analizzaScheda(base64Image) {
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyBdvQDBipxvoZq7Cy_hoSQ3R9bNJanL5rA") {
-    throw new Error("API Key mancante. Generala su Google AI Studio.");
+  // Nuovo sistema di sicurezza blindato: controlla solo che la chiave sia reale (più di 30 caratteri)
+  if (!GEMINI_API_KEY || GEMINI_API_KEY.length < 30) {
+    throw new Error("API Key mancante o non valida. Verifica il file vision.js.");
   }
 
-  // Rimuove l'intestazione data:image/jpeg;base64, per inviare solo i dati grezzi
   const base64Data = base64Image.split(',')[1];
   const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
-  // Il Prompt Spietato: costringe l'IA a non inventare e a usare una struttura dati rigida
   const prompt = `
 Sei un ingegnere meccanico. Estrai i parametri tecnici da questa scheda di cuscinetti.
 Non inserire spiegazioni. Non usare formattazione Markdown. 
@@ -50,7 +48,7 @@ Se un dato non è presente nell'immagine o non sei sicuro, imposta il valore a n
       ]
     }],
     generationConfig: {
-      temperature: 0.1, // Temperatura bassissima: niente creatività, solo lettura
+      temperature: 0.1, 
       topK: 1,
       topP: 1,
     }
@@ -68,7 +66,6 @@ Se un dato non è presente nell'immagine o non sei sicuro, imposta il valore a n
     const data = await response.json();
     let rawText = data.candidates[0].content.parts[0].text;
     
-    // Pulizia di eventuali artefatti markdown sfuggiti al controllo
     rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     
     return JSON.parse(rawText);
