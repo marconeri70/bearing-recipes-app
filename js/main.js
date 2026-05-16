@@ -103,6 +103,25 @@ function renderLista() {
     return;
   }
 
+  function aggiornaDisegnoPreview(url) {
+  const img = document.getElementById("drawing-image");
+  const placeholder = document.getElementById("drawing-placeholder");
+  const btnAi = document.getElementById("btn-ai-extract"); // Nuovo
+
+  if (url) {
+    img.src = url;
+    img.style.display = "block";
+    placeholder.style.display = "none";
+    // Mostra il tasto IA solo se l'immagine è un file locale (Base64), non un link web vuoto
+    if (immagineCorrenteData && btnAi) btnAi.classList.remove("is-hidden");
+  } else {
+    img.src = "";
+    img.style.display = "none";
+    placeholder.style.display = "block";
+    if (btnAi) btnAi.classList.add("is-hidden");
+  }
+}
+
   lavorazioni.forEach((lav) => {
     const riga = document.createElement("div");
     riga.className = "riga-lavorazione";
