@@ -264,64 +264,59 @@ async function gestisciSubmit(event) {
   const codice = document.getElementById("codice").value.trim();
   if (!codice) return alert("Inserisci il codice lavorazione (campo obbligatorio).");
 
-  const urlInput = document.getElementById("disegnoUrl");
-  const urlNormalizzato = normalizzaUrlImmagine(urlInput.value);
-  urlInput.value = urlNormalizzato;
-
-  const btnSubmit = event.target.querySelector('button[type="submit"]');
-  const textOriginale = btnSubmit.textContent;
-  btnSubmit.textContent = "⏳ Sincronizzazione...";
+  // UX Industriale: Feedback visivo per evitare doppi click dell'operatore
+  const btnSubmit = document.querySelector("#form-lavorazione button[type='submit']");
+  const originalText = btnSubmit.textContent;
+  btnSubmit.textContent = "Upload su Cloudflare R2...";
   btnSubmit.disabled = true;
 
-  const lav = {
-    id: idCorrente || generaId(),
-    codice,
-    irTipo: document.getElementById("irTipo").value.trim(),
-    irDiametro: leggiNumero("irDiametro"),
-    orTipo: document.getElementById("orTipo").value.trim(),
-    diametroSfera: leggiNumero("diametroSfera"),
-    numeroSfere: leggiNumero("numeroSfere"),
-    gabbiaTipo: document.getElementById("gabbiaTipo").value.trim(),
-    grassoTipo: document.getElementById("grassoTipo").value.trim(),
-    schermoTipo: document.getElementById("schermoTipo").value.trim(),
-    pesoMin: leggiNumero("pesoMin"),
-    pesoMax: leggiNumero("pesoMax"),
-    classeGioco: document.getElementById("classeGioco").value || "",
-    giocoMin: leggiNumero("giocoMin"),
-    giocoMax: leggiNumero("giocoMax"),
-    disegnoUrl: urlNormalizzato,
-    disegnoData: immagineCorrenteData || ""
-  };
-
   try {
-    await salvaSuFirestore(lav);
-    
+    let finalImageUrl = normalizzaUrlImmagine(document.getElementById("disegnoUrl").value);
+
+    // Se l'operatore ha caricato una foto dal tablet (Base64)
+    if (immagineCorrenteData && immagineCorrenteData.startsWith("data:image")) {
+      // 1. Spara la foto da 5MB al Cloudflare Worker
+      finalImageUrl = await caricaImmagineSulCloud(immagineCorrenteData);
+      // 2. Distrugge la foto dalla memoria locale per non intasare il database
+      immagineCorrenteData = ""; 
+    }
+
+    const lav = {
+      id: idCorrente || generaId(),
+      codice,
+      irTipo: document.getElementById("irTipo").value.trim(),
+      irDiametro: leggiNumero("irDiametro"),
+      orTipo: document.getElementById("orTipo").value.trim(),
+      diametroSfera: leggiNumero("diametroSfera"),
+      numeroSfere: leggiNumero("numeroSfere"),
+      gabbiaTipo: document.getElementById("gabbiaTipo").value.trim(),
+      grassoTipo: document.getElementById("grassoTipo").value.trim(),
+      schermoTipo: document.getElementById("schermoTipo").value.trim(),
+      pesoMin: leggiNumero("pesoMin"),
+      pesoMax: leggiNumero("pesoMax"),
+      classeGioco: document.getElementById("classeGioco").value || "",
+      giocoMin: leggiNumero("giocoMin"),
+      giocoMax: leggiNumero("giocoMax"),
+      disegnoUrl: finalImageUrl, // Salviamo SOLO il link da 50 byte
+      disegnoData: ""            // Payload Base64 azzerato (Firebase è salvo)
+    };
+
+    // --- SALVATAGGIO ---
+    // (Attualmente usa lo storage locale, da qui potrai agganciare la tua funzione Firebase)
     const idx = lavorazioni.findIndex((l) => l.id === lav.id);
     if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
 
+    salvaSuStorage();
     idCorrente = lav.id;
     renderLista();
     nascondiForm();
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btnSubmit.textContent = textOriginale;
-    btnSubmit.disabled = false;
-  }
-}
 
-function aggiornaGiocoIntegrato() {
-  const classVal = document.getElementById("classeGioco").value;
-  const diametro = leggiNumero("irDiametro");
-  
-  const tolleranza = calcolaTolleranze(classVal, diametro);
-  
-  if (tolleranza) {
-    document.getElementById("giocoMin").value = tolleranza.min !== null ? tolleranza.min.toString().replace('.', ',') : "";
-    document.getElementById("giocoMax").value = tolleranza.max !== null ? tolleranza.max.toString().replace('.', ',') : "";
-  } else {
-    document.getElementById("giocoMin").value = "";
-    document.getElementById("giocoMax").value = "";
+  } catch (error) {
+    alert("Errore critico di sistema: " + error.message);
+  } finally {
+    // Sblocca il terminale
+    btnSubmit.textContent = originalText;
+    btnSubmit.disabled = false;
   }
 }
 
