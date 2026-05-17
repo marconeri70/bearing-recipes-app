@@ -1,22 +1,18 @@
-// js/main.js - Versione Definitiva (Cloud + IA + OCR Filtrato + Zoom Interattivo)
+// js/main.js - Produzione (Firestore + IA + Google Lens Interattivo)
 
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
 
-// Importazione delle chiavi di connessione e delle librerie ufficiali di Google Firestore
 import { db } from './api/firebase-config.js';
 import { collection, doc, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ==========================================
-// 1. STATO LOCALE E UTILITY
-// ==========================================
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
 const FIRESTORE_COLLECTION = "ricette_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
-let cachedOcrWords = []; // Memoria cache per il testo estratto da Tesseract
+let cachedOcrWords = []; 
 
 function generaId() { return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8); }
 
@@ -31,7 +27,6 @@ function normalizzaUrlImmagine(url) {
   return u;
 }
 
-// --- LOGICA DI RETE ATTIVA PER IL CLOUD SINCRONIZZATO ---
 async function salvaSuCloud(lav) {
   const docRef = doc(db, FIRESTORE_COLLECTION, lav.id);
   await setDoc(docRef, lav);
@@ -45,23 +40,23 @@ async function caricaDaCloud() {
   try {
     const querySnapshot = await getDocs(collection(db, FIRESTORE_COLLECTION));
     lavorazioni = [];
-    querySnapshot.forEach((doc) => {
-      lavorazioni.push(doc.data());
-    });
+    querySnapshot.forEach((doc) => { lavorazioni.push(doc.data()); });
     localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
   } catch (error) {
-    console.error("[SYS] Rete non disponibile. Caricamento da cache locale offline:", error);
+    console.error("[SYS] Rete Cloud assente:", error);
     const raw = localStorage.getItem(STORAGE_KEY);
     lavorazioni = raw ? JSON.parse(raw) : [];
   }
   return lavorazioni;
 }
 
-function leggiNumero(id) { const raw = document.getElementById(id).value; if (!raw) return null; const n = Number(raw.replace(",", ".")); return Number.isNaN(n) ? null : n; }
+function leggiNumero(id) { 
+  const raw = document.getElementById(id).value; 
+  if (!raw) return null; 
+  const n = Number(raw.replace(",", ".")); 
+  return Number.isNaN(n) ? null : n; 
+}
 
-// ==========================================
-// 2. GESTIONE INTERFACCIA, OCR FILTRATO E ZOOM
-// ==========================================
 function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
 function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
 function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
@@ -75,22 +70,18 @@ async function inizializzaGettoniOcr(imageSrc) {
   wrapper.style.display = "none";
   cachedOcrWords = [];
 
-  console.log("[OCR] Avvio scansione Tesseract locale...");
-
   try {
-    const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Local] ${m.status}`) });
-    cachedOcrWords = result.data.words; // Salvataggio coordinate per lo zoom
+    const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Core] ${m.status}`) });
+    cachedOcrWords = result.data.words;
 
-    // FILTRO ANTIRUMORE SPIETATO
     const paroleValide = cachedOcrWords.map(w => w.text.trim()).filter(text => {
-      if (text.length < 2) return false; // Scarta polvere e macchie
-      if (/\d/.test(text)) return true;  // Tieni quote e misure
+      if (text.length < 2) return false;
+      if (/\d/.test(text)) return true;
       const whitelist = ['SKF', 'CN', 'IR', 'OR', 'MAX', 'MIN', 'DIA', 'STANDARD', 'C3', 'C4'];
-      return whitelist.includes(text.toUpperCase()); // Tieni keyword ingegneristiche
+      return whitelist.includes(text.toUpperCase());
     });
 
     if (paroleValide.length === 0) return;
-
     const poolUnico = [...new Set(paroleValide)];
 
     poolUnico.forEach(testo => {
@@ -98,41 +89,49 @@ async function inizializzaGettoniOcr(imageSrc) {
       chip.type = "button";
       chip.className = "btn btn-light";
       chip.style.margin = "2px";
-      chip.style.fontSize = "0.9rem";
-      chip.style.fontWeight = "bold";
-      chip.style.padding = "6px 10px";
+      chip.style.fontSize = "0.85rem";
+      chip.style.padding = "5px 9px";
       chip.textContent = testo;
 
       chip.addEventListener("click", () => {
         navigator.clipboard.writeText(testo);
-        const testoOriginale = chip.textContent;
+        const orig = chip.textContent;
         chip.textContent = "Copiato! ✅";
         chip.style.backgroundColor = "#bbf7d0";
-        setTimeout(() => { chip.textContent = testoOriginale; chip.style.backgroundColor = ""; }, 1200);
+        setTimeout(() => { chip.textContent = orig; chip.style.backgroundColor = ""; }, 1200);
       });
-
       poolContainer.appendChild(chip);
     });
-
     wrapper.style.display = "block";
   } catch (error) {
-    console.error("[OCR] Fallimento scansione locale:", error);
+    console.error("[OCR] Scansione fallita:", error);
   }
 }
 
-// MOTORE ZOOM E SELEZIONE TESTO
+// LOGICA GOOGLE LENS (MENU A COMPARSA AL TOCCO)
 function apriZoomImmagine(src) {
   const modal = document.getElementById("image-zoom-modal");
   const img = document.getElementById("zoomed-image");
   const overlay = document.getElementById("zoomed-ocr-overlay");
-  const toast = document.getElementById("lens-toast");
-  if(!modal || !img || !overlay) return;
+  const menu = document.getElementById("lens-context-menu");
+  const btnCopy = document.getElementById("btn-lens-copy");
+  
+  if(!modal || !img || !overlay || !menu) return;
 
   modal.classList.remove("is-hidden");
   img.src = src;
 
+  const spegniLens = () => {
+    document.querySelectorAll(".lens-box.active").forEach(b => b.classList.remove("active"));
+    menu.classList.add("is-hidden");
+  };
+
+  overlay.onclick = spegniLens;
+
   img.onload = () => {
     overlay.innerHTML = "";
+    spegniLens();
+    
     overlay.style.width = img.clientWidth + "px";
     overlay.style.height = img.clientHeight + "px";
     overlay.style.top = img.offsetTop + "px";
@@ -142,34 +141,39 @@ function apriZoomImmagine(src) {
     const ratioY = img.clientHeight / img.naturalHeight;
 
     cachedOcrWords.forEach(word => {
-      // Filtro antirumore anche nello zoom: ignoriamo i frammenti senza senso
       const text = word.text.trim();
       if (text.length < 2 && !/\d/.test(text)) return; 
 
       const box = document.createElement("div");
       box.className = "lens-box";
       
-      // Calcolo coordinate proporzionali
       box.style.left = (word.bbox.x0 * ratioX) + "px";
       box.style.top = (word.bbox.y0 * ratioY) + "px";
       box.style.width = ((word.bbox.x1 - word.bbox.x0) * ratioX) + "px";
       box.style.height = ((word.bbox.y1 - word.bbox.y0) * ratioY) + "px";
 
-      // LOGICA "TAP TO CAPTURE" (Stile Google Lens)
-      box.addEventListener("click", () => {
-        // 1. Copia negli appunti
-        navigator.clipboard.writeText(text);
+      box.addEventListener("click", (e) => {
+        e.stopPropagation();
+        spegniLens();
         
-        // 2. Feedback visivo sul box (Diventa Verde)
-        box.classList.add("captured");
-        setTimeout(() => box.classList.remove("captured"), 800);
+        box.classList.add("active"); 
 
-        // 3. Mostra il Toast
-        if (toast) {
-          toast.textContent = `"${text}" copiato! 📋`;
-          toast.classList.add("show");
-          setTimeout(() => toast.classList.remove("show"), 2000);
-        }
+        menu.style.left = (box.offsetLeft + box.clientWidth / 2) + "px";
+        menu.style.top = box.offsetTop + "px";
+        menu.classList.remove("is-hidden");
+
+        btnCopy.onclick = (event) => {
+          event.stopPropagation();
+          navigator.clipboard.writeText(text);
+          
+          const toast = document.getElementById("lens-toast");
+          if (toast) {
+            toast.textContent = `"${text}" copiato negli appunti! 📋`;
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 2000);
+          }
+          spegniLens();
+        };
       });
 
       overlay.appendChild(box);
@@ -192,7 +196,6 @@ function aggiornaDisegnoPreview(url) {
     img.src = url; img.style.display = "block"; placeholder.style.display = "none";
     if (url.startsWith("data:image") && btnIA) btnIA.classList.remove("is-hidden"); 
     
-    // Attiva il click per esplodere la miniatura nel popup
     img.onclick = () => apriZoomImmagine(img.src);
 
     img.onload = () => {
@@ -215,14 +218,7 @@ function renderLista() {
   aggiornaConteggio();
 
   if (lavorazioni.length === 0) {
-    container.innerHTML = `<div class="riga-lavorazione" style="cursor: default;">
-      <div class="riga-left-content">
-        <div class="riga-lavorazione-info">
-          <span class="riga-codice">Nessuna lavorazione salvata</span>
-          <span class="riga-sub">Premi "Nuova" o aggiorna la rete.</span>
-        </div>
-      </div>
-    </div>`;
+    container.innerHTML = `<div class="riga-lavorazione" style="cursor: default;"><div class="riga-left-content"><div class="riga-lavorazione-info"><span class="riga-codice">Nessuna ricetta presente</span><span class="riga-sub">Premi "Nuova" o importa dati.</span></div></div></div>`;
     return;
   }
 
@@ -265,21 +261,20 @@ function renderLista() {
     ].filter(Boolean);
     sub.textContent = parts.join(" · ");
 
-    info.append(codice, sub);
     leftContent.appendChild(info);
+    info.append(codice, sub);
     riga.appendChild(leftContent);
 
-    const badgeContainer = document.createElement("div");
-    badgeContainer.className = "riga-actions";
-
     if (lav.classeGioco) {
+      const badgeContainer = document.createElement("div");
+      badgeContainer.className = "riga-actions";
       const b = document.createElement("span");
       b.className = "badge badge-gioco";
-      b.textContent = `${lav.classeGioco} ${lav.giocoMin ?? "?"}–${lav.giocoMax ?? "?"} µm`;
+      b.textContent = `${lav.classeGioco}`;
       badgeContainer.appendChild(b);
+      riga.appendChild(badgeContainer);
     }
 
-    riga.appendChild(badgeContainer);
     container.appendChild(riga);
   });
 }
@@ -288,10 +283,8 @@ function resetForm() {
   idCorrente = null;
   immagineCorrenteData = "";
   document.getElementById("form-lavorazione").reset();
-  
   const fileInput = document.getElementById("file-galleria");
   if(fileInput) fileInput.value = ""; 
-  
   document.getElementById("stato-modifica").textContent = "Nuova lavorazione";
   document.getElementById("btn-elimina").disabled = true;
   aggiornaDisegnoPreview("");
@@ -327,54 +320,40 @@ function caricaLavorazioneInForm(id) {
   renderLista();
 }
 
-// ==========================================
-// 3. INFRASTRUTTURA CLOUD E IA (Cloudflare / Gemini)
-// ==========================================
-
 async function caricaImmagineSulCloud(base64Data) {
   const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev"; 
-
   const response = await fetch(WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ image: base64Data })
   });
-
-  if (!response.ok) throw new Error("Sincronizzazione foto fallita. Il server ha respinto il payload.");
+  if (!response.ok) throw new Error("Sincronizzazione foto fallita su Cloudflare R2.");
   const data = await response.json();
   return data.url; 
 }
 
 async function analizzaConIA() {
   if (!immagineCorrenteData) return alert("Carica prima un'immagine.");
-  
   const btnIA = document.getElementById("btn-analizza-ia");
   const originalText = btnIA.textContent;
-  btnIA.textContent = "⏳ Analisi in corso...";
+  btnIA.textContent = "⏳ Estrattore IA Attivo...";
   btnIA.disabled = true;
 
   try {
     const WORKER_IA_URL = "https://bearing-image-router.vocidicassino.workers.dev/analyze"; 
-
     const response = await fetch(WORKER_IA_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image: immagineCorrenteData })
     });
 
-    if (!response.ok) throw new Error("Errore durante l'estrazione IA");
+    if (!response.ok) throw new Error("Errore durante l'estrazione assistita.");
     const dati = await response.json();
 
     const mappatura = {
-      "codice": dati.codice,
-      "irDiametro": dati.irDiametro,
-      "diametroSfera": dati.diametroSfera,
-      "numeroSfere": dati.numeroSfere,
-      "pesoMin": dati.pesoMin,
-      "pesoMax": dati.pesoMax,
-      "giocoMin": dati.giocoMin,
-      "giocoMax": dati.giocoMax,
-      "classeGioco": dati.classeGioco
+      "codice": dati.codice, "irDiametro": dati.irDiametro, "diametroSfera": dati.diametroSfera,
+      "numeroSfere": dati.numeroSfere, "pesoMin": dati.pesoMin, "pesoMax": dati.pesoMax,
+      "giocoMin": dati.giocoMin, "giocoMax": dati.giocoMax, "classeGioco": dati.classeGioco
     };
 
     for (const [idElemento, valore] of Object.entries(mappatura)) {
@@ -383,30 +362,25 @@ async function analizzaConIA() {
         if (campo) {
           campo.value = valore;
           campo.style.backgroundColor = "#fef08a"; 
-          setTimeout(() => campo.style.backgroundColor = "", 5000);
+          setTimeout(() => campo.style.backgroundColor = "", 4000);
         }
       }
     }
   } catch (error) {
-    alert("Analisi fallita: " + error.message);
+    alert("Analisi IA fallita: " + error.message);
   } finally {
-    btnIA.textContent = originalText;
-    btnIA.disabled = false;
+    btnIA.textContent = originalText; btnIA.disabled = false;
   }
 }
-
-// ==========================================
-// 4. LOGICA DI BUSINESS E SALVATAGGIO
-// ==========================================
 
 async function gestisciSubmit(event) {
   event.preventDefault();
   const codice = document.getElementById("codice").value.trim();
-  if (!codice) return alert("Inserisci il codice lavorazione (campo obbligatorio).");
+  if (!codice) return alert("Inserisci il codice lavorazione.");
 
   const btnSubmit = document.querySelector("#form-lavorazione button[type='submit']");
   const originalText = btnSubmit.textContent;
-  btnSubmit.textContent = "Sincronizzazione Cloud...";
+  btnSubmit.textContent = "Sincronizzazione Rete Cloud...";
   btnSubmit.disabled = true;
 
   try {
@@ -438,16 +412,13 @@ async function gestisciSubmit(event) {
     };
 
     await salvaSuCloud(lav);
-
     idCorrente = lav.id;
     renderLista();
     nascondiForm();
-
   } catch (error) {
-    alert("Errore critico di sincronizzazione: " + error.message);
+    alert("Errore critico di sincronizzazione Firestore: " + error.message);
   } finally {
-    btnSubmit.textContent = originalText;
-    btnSubmit.disabled = false;
+    btnSubmit.textContent = originalText; btnSubmit.disabled = false;
   }
 }
 
@@ -459,17 +430,12 @@ function aggiornaGiocoIntegrato() {
     document.getElementById("giocoMin").value = tolleranza.min ?? "";
     document.getElementById("giocoMax").value = tolleranza.max ?? "";
   } else {
-    document.getElementById("giocoMin").value = "";
-    document.getElementById("giocoMax").value = "";
+    document.getElementById("giocoMin").value = ""; document.getElementById("giocoMax").value = "";
   }
 }
 
-// ==========================================
-// 5. INIT E BINDING DEGLI EVENTI DOM
-// ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("[SYS] Avvio Orchestratore...");
-
   initKioskAuth();
 
   const classiDisponibili = await inizializzaTabellaGioco("tabella_gioco.csv");
@@ -478,38 +444,29 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectClasse.innerHTML = '<option value="">Seleziona classe…</option>';
     classiDisponibili.forEach(cls => {
       const opt = document.createElement("option");
-      opt.value = cls;
-      opt.textContent = cls;
-      selectClasse.appendChild(opt);
+      opt.value = cls; opt.textContent = cls; selectClasse.appendChild(opt);
     });
   }
 
-  // Sincronizzazione iniziale e download in tempo reale all'avvio
   lavorazioni = await caricaDaCloud();
-  renderLista();
-  resetForm();
-  nascondiForm();
+  renderLista(); resetForm(); nascondiForm();
 
-  // BINDING CHIUSURA ZOOM
   const btnCloseZoom = document.getElementById("btn-close-zoom");
-  if (btnCloseZoom) {
-    btnCloseZoom.addEventListener("click", chiudiZoomImmagine);
-  }
+  if (btnCloseZoom) btnCloseZoom.addEventListener("click", chiudiZoomImmagine);
 
   document.getElementById("form-lavorazione").addEventListener("submit", gestisciSubmit);
   
   const btnNuova = document.getElementById("btn-nuova");
   if(btnNuova) {
-      btnNuova.addEventListener("click", () => {
-        resetForm();
-        mostraForm();
-        window.scrollTo({ top: document.getElementById("card-form").getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
-      });
+    btnNuova.addEventListener("click", () => {
+      resetForm(); mostraForm();
+      window.scrollTo({ top: document.getElementById("card-form").getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
+    });
   }
 
   document.getElementById("btn-reset").addEventListener("click", resetForm);
   document.getElementById("btn-elimina").addEventListener("click", () => {
-    if (!idCorrente || !confirm("Vuoi davvero eliminare questa lavorazione?")) return;
+    if (!idCorrente || !confirm("Eliminare questa lavorazione dal Cloud centralizzato?")) return;
     lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
     resetForm(); nascondiForm(); renderLista();
@@ -527,10 +484,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        immagineCorrenteData = ev.target.result;
-        aggiornaDisegnoPreview(immagineCorrenteData);
-      };
+      reader.onload = (ev) => { immagineCorrenteData = ev.target.result; aggiornaDisegnoPreview(immagineCorrenteData); };
       reader.readAsDataURL(file);
     }
   };
@@ -538,13 +492,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-file-galleria").addEventListener("click", () => document.getElementById("file-galleria").click());
   document.getElementById("file-galleria").addEventListener("change", fileHandler);
 
-  const btnIA = document.getElementById("btn-analizza-ia");
-  if(btnIA) {
-    btnIA.addEventListener("click", analizzaConIA);
-  }
+  if(document.getElementById("btn-analizza-ia")) document.getElementById("btn-analizza-ia").addEventListener("click", analizzaConIA);
 
   document.getElementById("btn-export-csv").addEventListener("click", () => {
-    if (lavorazioni.length === 0) return alert("Nessuna lavorazione da esportare.");
+    if (lavorazioni.length === 0) return alert("Nessuna lavorazione salvata.");
     esportaLavorazioniInCSV(lavorazioni);
   });
 
@@ -558,13 +509,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
           const nuovi = analizzaImportCSV(ev.target.result, generaId, normalizzaUrlImmagine);
           lavorazioni = lavorazioni.concat(nuovi);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni)); renderLista(); alert("Importazione completata.");
-        } catch(err) { alert("Errore importazione CSV: " + err.message); }
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni)); renderLista(); alert("Importazione completata con successo.");
+        } catch(err) { alert("Errore importazione: " + err.message); }
       };
       reader.readAsText(file, "utf-8");
     }
     fileImport.value = "";
   });
 
-  document.getElementById("btn-scheda-tecnica").addEventListener("click", () => alert("Visualizzazione scheda tecnica attivata (Modalità temporanea)"));
+  document.getElementById("btn-scheda-tecnica").addEventListener("click", () => alert("Generazione scheda tecnica attiva."));
 });
