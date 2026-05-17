@@ -4,6 +4,9 @@ import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
 
+// ==========================================
+// 1. STATO LOCALE E UTILITY
+// ==========================================
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
@@ -26,6 +29,9 @@ function salvaSuStorage() { localStorage.setItem(STORAGE_KEY, JSON.stringify(lav
 function caricaDaStorage() { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
 function leggiNumero(id) { const raw = document.getElementById(id).value; if (!raw) return null; const n = Number(raw.replace(",", ".")); return Number.isNaN(n) ? null : n; }
 
+// ==========================================
+// 2. GESTIONE INTERFACCIA (UI/DOM)
+// ==========================================
 function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
 function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
 function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
@@ -33,10 +39,15 @@ function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
+  const btnIA = document.getElementById("btn-analizza-ia");
+  
   if (url) {
     img.src = url; img.style.display = "block"; placeholder.style.display = "none";
+    // Mostra il tasto IA solo se l'immagine è un Base64 appena scattato dal tablet
+    if (url.startsWith("data:image") && btnIA) btnIA.classList.remove("is-hidden"); 
   } else {
     img.src = ""; img.style.display = "none"; placeholder.style.display = "block";
+    if (btnIA) btnIA.classList.add("is-hidden");
   }
 }
 
@@ -123,7 +134,6 @@ function resetForm() {
   immagineCorrenteData = "";
   document.getElementById("form-lavorazione").reset();
   
-  // FIX CRITICO: Azzera fisicamente l'input file invisibile per forzare il ricaricamento
   const fileInput = document.getElementById("file-galleria");
   if(fileInput) fileInput.value = ""; 
   
@@ -163,11 +173,12 @@ function caricaLavorazioneInForm(id) {
 }
 
 // ==========================================
-// MOTORE UPLOAD CLOUDFLARE R2
+// 3. INFRASTRUTTURA CLOUD E IA (Cloudflare / Gemini)
 // ==========================================
+
 async function caricaImmagineSulCloud(base64Data) {
-  // INSERISCI QUI L'INDIRIZZO DEL TUO WORKER CLOUDFLARE
-  const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev/"; 
+  // INSERISCI QUI IL TUO LINK CLOUDFLARE WORKER (SENZA SLASH FINALE)
+  const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev"; 
 
   const response = await fetch(WORKER_URL, {
     method: "POST",
@@ -175,13 +186,66 @@ async function caricaImmagineSulCloud(base64Data) {
     body: JSON.stringify({ image: base64Data })
   });
 
-  if (!response.ok) {
-    throw new Error("Sincronizzazione foto fallita. Il server ha respinto il payload.");
-  }
-
+  if (!response.ok) throw new Error("Sincronizzazione foto fallita. Il server ha respinto il payload.");
   const data = await response.json();
   return data.url; 
 }
+
+async function analizzaConIA() {
+  if (!immagineCorrenteData) return alert("Carica prima un'immagine.");
+  
+  const btnIA = document.getElementById("btn-analizza-ia");
+  const originalText = btnIA.textContent;
+  btnIA.textContent = "⏳ Analisi in corso...";
+  btnIA.disabled = true;
+
+  try {
+    // INSERISCI QUI IL TUO LINK CLOUDFLARE WORKER + "/analyze"
+    const WORKER_IA_URL = "INSERISCI_IL_TUO_LINK_WORKERS_DEV_QUI/analyze"; 
+
+    const response = await fetch(WORKER_IA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: immagineCorrenteData })
+    });
+
+    if (!response.ok) throw new Error("Errore durante l'estrazione IA");
+    const dati = await response.json();
+
+    const mappatura = {
+      "codice": dati.codice,
+      "irDiametro": dati.irDiametro,
+      "diametroSfera": dati.diametroSfera,
+      "numeroSfere": dati.numeroSfere,
+      "pesoMin": dati.pesoMin,
+      "pesoMax": dati.pesoMax,
+      "giocoMin": dati.giocoMin,
+      "giocoMax": dati.giocoMax,
+      "classeGioco": dati.classeGioco
+    };
+
+    // Compila i campi e applica il feedback visivo (Human-in-the-Loop)
+    for (const [idElemento, valore] of Object.entries(mappatura)) {
+      if (valore !== null && valore !== undefined) {
+        const campo = document.getElementById(idElemento);
+        if (campo) {
+          campo.value = valore;
+          campo.style.backgroundColor = "#fef08a"; // Giallo allerta
+          setTimeout(() => campo.style.backgroundColor = "", 5000);
+        }
+      }
+    }
+  } catch (error) {
+    alert("Analisi fallita: " + error.message);
+  } finally {
+    btnIA.textContent = originalText;
+    btnIA.disabled = false;
+  }
+}
+
+// ==========================================
+// 4. LOGICA DI BUSINESS E SALVATAGGIO
+// ==========================================
 
 async function gestisciSubmit(event) {
   event.preventDefault();
@@ -198,7 +262,7 @@ async function gestisciSubmit(event) {
 
     if (immagineCorrenteData && immagineCorrenteData.startsWith("data:image")) {
       finalImageUrl = await caricaImmagineSulCloud(immagineCorrenteData);
-      immagineCorrenteData = ""; 
+      immagineCorrenteData = ""; // Distrugge il Base64 per salvare il Database
     }
 
     const lav = {
@@ -251,7 +315,7 @@ function aggiornaGiocoIntegrato() {
 }
 
 // ==========================================
-// INIT E BINDING DEGLI EVENTI
+// 5. INIT E BINDING DEGLI EVENTI DOM
 // ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("[SYS] Avvio Orchestratore...");
@@ -302,7 +366,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!immagineCorrenteData) aggiornaDisegnoPreview(e.target.value);
   });
 
-  // GESTIONE CORRETTA FOTOCAMERA / GALLERIA
+  // GESTIONE FOTOCAMERA / GALLERIA
   const fileHandler = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -315,10 +379,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   };
   
-  document.getElementById("btn-file-galleria").addEventListener("click", () => {
-    document.getElementById("file-galleria").click();
-  });
+  document.getElementById("btn-file-galleria").addEventListener("click", () => document.getElementById("file-galleria").click());
   document.getElementById("file-galleria").addEventListener("change", fileHandler);
+
+  // BINDING TASTO IA
+  const btnIA = document.getElementById("btn-analizza-ia");
+  if(btnIA) {
+    btnIA.addEventListener("click", analizzaConIA);
+  }
 
   document.getElementById("btn-export-csv").addEventListener("click", () => {
     if (lavorazioni.length === 0) return alert("Nessuna lavorazione da esportare.");
