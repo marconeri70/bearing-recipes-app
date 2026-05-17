@@ -1,4 +1,4 @@
-// js/main.js - Versione Finale di Produzione (Fix Rendering Lista)
+// js/main.js - Versione Definitiva (Cloud + IA + OCR Filtrato + Zoom Interattivo)
 
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
@@ -16,6 +16,7 @@ const FIRESTORE_COLLECTION = "ricette_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
+let cachedOcrWords = []; // Memoria cache per il testo estratto da Tesseract
 
 function generaId() { return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8); }
 
@@ -59,7 +60,7 @@ async function caricaDaCloud() {
 function leggiNumero(id) { const raw = document.getElementById(id).value; if (!raw) return null; const n = Number(raw.replace(",", ".")); return Number.isNaN(n) ? null : n; }
 
 // ==========================================
-// 2. GESTIONE INTERFACCIA E GETTONI TESTO (OCR)
+// 2. GESTIONE INTERFACCIA, OCR FILTRATO E ZOOM
 // ==========================================
 function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
 function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
@@ -72,14 +73,22 @@ async function inizializzaGettoniOcr(imageSrc) {
 
   poolContainer.innerHTML = "";
   wrapper.style.display = "none";
+  cachedOcrWords = [];
 
-  console.log("[OCR] Avvio scansione Tesseract locale per estrazione gettoni...");
+  console.log("[OCR] Avvio scansione Tesseract locale...");
 
   try {
     const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Local] ${m.status}`) });
-    const { words } = result.data;
+    cachedOcrWords = result.data.words; // Salvataggio coordinate per lo zoom
 
-    const paroleValide = words.map(w => w.text.trim()).filter(t => t.length > 1);
+    // FILTRO ANTIRUMORE SPIETATO
+    const paroleValide = cachedOcrWords.map(w => w.text.trim()).filter(text => {
+      if (text.length < 2) return false; // Scarta polvere e macchie
+      if (/\d/.test(text)) return true;  // Tieni quote e misure
+      const whitelist = ['SKF', 'CN', 'IR', 'OR', 'MAX', 'MIN', 'DIA', 'STANDARD', 'C3', 'C4'];
+      return whitelist.includes(text.toUpperCase()); // Tieni keyword ingegneristiche
+    });
+
     if (paroleValide.length === 0) return;
 
     const poolUnico = [...new Set(paroleValide)];
@@ -89,8 +98,9 @@ async function inizializzaGettoniOcr(imageSrc) {
       chip.type = "button";
       chip.className = "btn btn-light";
       chip.style.margin = "2px";
-      chip.style.fontSize = "0.85rem";
-      chip.style.padding = "4px 8px";
+      chip.style.fontSize = "0.9rem";
+      chip.style.fontWeight = "bold";
+      chip.style.padding = "6px 10px";
       chip.textContent = testo;
 
       chip.addEventListener("click", () => {
@@ -98,20 +108,56 @@ async function inizializzaGettoniOcr(imageSrc) {
         const testoOriginale = chip.textContent;
         chip.textContent = "Copiato! ✅";
         chip.style.backgroundColor = "#bbf7d0";
-        setTimeout(() => {
-          chip.textContent = testoOriginale;
-          chip.style.backgroundColor = "";
-        }, 1200);
+        setTimeout(() => { chip.textContent = testoOriginale; chip.style.backgroundColor = ""; }, 1200);
       });
 
       poolContainer.appendChild(chip);
     });
 
     wrapper.style.display = "block";
-    console.log("[OCR] Generazione gettoni completata con successo.");
   } catch (error) {
-    console.error("[OCR] Fallimento scansione locale gettoni:", error);
+    console.error("[OCR] Fallimento scansione locale:", error);
   }
+}
+
+// MOTORE ZOOM E SELEZIONE TESTO
+function apriZoomImmagine(src) {
+  const modal = document.getElementById("image-zoom-modal");
+  const img = document.getElementById("zoomed-image");
+  const overlay = document.getElementById("zoomed-ocr-overlay");
+  if(!modal || !img || !overlay) return;
+
+  modal.classList.remove("is-hidden");
+  img.src = src;
+
+  img.onload = () => {
+    overlay.innerHTML = "";
+    overlay.style.width = img.clientWidth + "px";
+    overlay.style.height = img.clientHeight + "px";
+    overlay.style.top = img.offsetTop + "px";
+    overlay.style.left = img.offsetLeft + "px";
+
+    const ratioX = img.clientWidth / img.naturalWidth;
+    const ratioY = img.clientHeight / img.naturalHeight;
+
+    cachedOcrWords.forEach(word => {
+      if (word.text.trim().length === 0) return;
+      const span = document.createElement("span");
+      span.className = "zoomed-word";
+      span.textContent = word.text;
+      span.style.left = (word.bbox.x0 * ratioX) + "px";
+      span.style.top = (word.bbox.y0 * ratioY) + "px";
+      span.style.width = ((word.bbox.x1 - word.bbox.x0) * ratioX) + "px";
+      span.style.height = ((word.bbox.y1 - word.bbox.y0) * ratioY) + "px";
+      span.style.fontSize = (word.font_size * ratioY * 0.8) + "px";
+      overlay.appendChild(span);
+    });
+  };
+}
+
+function chiudiZoomImmagine() {
+  const modal = document.getElementById("image-zoom-modal");
+  if (modal) modal.classList.add("is-hidden");
 }
 
 function aggiornaDisegnoPreview(url) {
@@ -124,11 +170,15 @@ function aggiornaDisegnoPreview(url) {
     img.src = url; img.style.display = "block"; placeholder.style.display = "none";
     if (url.startsWith("data:image") && btnIA) btnIA.classList.remove("is-hidden"); 
     
+    // Attiva il click per esplodere la miniatura nel popup
+    img.onclick = () => apriZoomImmagine(img.src);
+
     img.onload = () => {
       if (url.startsWith("data:image")) inizializzaGettoniOcr(url);
     };
   } else {
     img.src = ""; img.style.display = "none"; placeholder.style.display = "block";
+    img.onclick = null;
     if (btnIA) btnIA.classList.add("is-hidden");
     if (wrapper) wrapper.style.display = "none";
   }
@@ -169,7 +219,6 @@ function renderLista() {
     const leftContent = document.createElement("div");
     leftContent.className = "riga-left-content";
 
-    // FIX CHIRURGICO: Rimosso il typo che causava il crash
     if (lav.disegnoUrl) {
       const thumb = document.createElement("img");
       thumb.className = "riga-thumb";
@@ -418,6 +467,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderLista();
   resetForm();
   nascondiForm();
+
+  // BINDING CHIUSURA ZOOM
+  const btnCloseZoom = document.getElementById("btn-close-zoom");
+  if (btnCloseZoom) {
+    btnCloseZoom.addEventListener("click", chiudiZoomImmagine);
+  }
 
   document.getElementById("form-lavorazione").addEventListener("submit", gestisciSubmit);
   
