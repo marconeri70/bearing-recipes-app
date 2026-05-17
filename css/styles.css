@@ -240,12 +240,33 @@ input:focus, select:focus {
    RESPONSIVITÀ (Tablet e Smartphone)
    ========================================== */
 @media (max-width: 900px) {
-  .main-content { flex-direction: column; overflow: auto; }
-  .list-section { width: 100%; height: 35vh; border-right: none; border-bottom: 2px solid var(--border); }
-  .form-section { padding: 1rem; }
-  .card { padding: 1.5rem; }
+  /* Sblocca lo scorrimento naturale del telefono */
+  body { overflow: auto; }
+  .app-container { height: auto; min-height: 100vh; }
+  .main-content { flex-direction: column; overflow: visible; }
+  
+  /* Adatta la lista ricette in alto, con scroll interno se sono troppe */
+  .list-section { 
+    width: 100%; 
+    height: auto; 
+    max-height: 40vh; 
+    border-right: none; 
+    border-bottom: 2px solid var(--border); 
+  }
+  
+  /* Il form scorre fluidamente sotto */
+  .form-section { padding: 1rem; overflow: visible; }
+  .card { padding: 1.2rem; }
   .form-grid { grid-template-columns: 1fr; gap: 1rem; }
   .form-group.full { grid-column: span 1; }
   .form-actions { flex-direction: column; }
   .drawing-controls { flex-direction: column; }
+  
+  /* FIX IMMAGINI MOZZATE: Contiene la foto nel box senza tagliarla */
+  #drawing-image { 
+    width: 100%; 
+    height: auto; 
+    max-height: 400px; 
+    object-fit: contain; 
+  }
 }
