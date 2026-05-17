@@ -237,6 +237,77 @@ input:focus, select:focus {
 }
 
 /* ==========================================
+   MODALE ZOOM IMMAGINE (POPUP)
+   ========================================== */
+#drawing-image {
+  cursor: zoom-in; /* Fa capire all'operatore che può cliccare */
+  transition: transform 0.2s;
+}
+#drawing-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.zoom-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.95); /* Sfondo quasi nero */
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  overflow: auto; /* Permette di scorrere immagini enormi */
+}
+
+.btn-close-zoom {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 10001;
+  padding: 0.8rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.zoom-container {
+  position: relative;
+  margin: auto;
+  padding: 5rem 1rem 2rem 1rem; /* Spazio per il bottone di chiusura */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+#zoomed-image {
+  max-width: none;
+  width: 100%;
+  min-width: 800px; /* Forza un'immagine grande per la selezione facile */
+  height: auto;
+  display: block;
+  background: white;
+}
+
+#zoomed-ocr-overlay {
+  position: absolute;
+  pointer-events: none; /* Lascia passare i click al contenitore */
+}
+
+.zoomed-word {
+  position: absolute;
+  color: transparent; /* Testo invisibile ma selezionabile */
+  background: rgba(37, 99, 235, 0.15); /* Evidenziatore azzurro leggero */
+  user-select: text; /* Abilita la selezione testo nativa del telefono */
+  pointer-events: auto; /* Cattura il dito */
+  cursor: text;
+}
+
+/* ==========================================
    RESPONSIVITÀ (Smartphone VERTICALE - Sotto 600px)
    Corregge l'impilamento orizzontale di header e lista
    ========================================== */
