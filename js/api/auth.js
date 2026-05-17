@@ -6,106 +6,99 @@ const OPERATOR_CACHE = {
   "0000": { id: "OP_LINE_01", name: "Linea 1", role: "operator" }
 };
 
-let currentPin = "";
 let sessionTimeout = null;
 const SESSION_DURATION_MS = 10 * 60 * 1000; // 10 Minuti di inattività
 
-// Riferimenti agli elementi DOM
-const lockScreen = document.getElementById('kiosk-lock-screen');
-const appContent = document.getElementById('app-content');
-const operatorInfo = document.getElementById('operator-info-display');
-const dots = [
-  document.getElementById('dot-1'),
-  document.getElementById('dot-2'),
-  document.getElementById('dot-3'),
-  document.getElementById('dot-4')
-];
-
 /**
- * Inizializza gli ascoltatori per il tastierino numerico
+ * Inizializza gli ascoltatori per il nuovo tastierino nativo
  */
 export function initKioskAuth() {
-  // Binding numeri
-  document.querySelectorAll('.num-btn[data-val]').forEach(btn => {
-    btn.onclick = () => handlePinInput(btn.getAttribute('data-val'));
-  });
+  const btnUnlock = document.getElementById('btn-kiosk-unlock');
+  const pinInput = document.getElementById('kiosk-pin');
 
-  // Binding tasti azione
-  const btnClear = document.getElementById('btn-clear');
-  const btnEnter = document.getElementById('btn-enter');
-  
-  if (btnClear) btnClear.onclick = clearPin;
-  if (btnEnter) btnEnter.onclick = validatePin;
+  // Binding del bottone Sblocca
+  if (btnUnlock) {
+    btnUnlock.addEventListener('click', validatePin);
+  }
 
-  // Reset del timer ad ogni interazione dell'utente
+  // Binding del tasto "Invio" sulla tastiera del tablet
+  if (pinInput) {
+    pinInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') validatePin();
+    });
+  }
+
+  // Reset del timer ad ogni interazione dell'utente sulla linea (Null-safe)
   document.addEventListener('touchstart', resetInactivityTimer, { passive: true });
   document.addEventListener('click', resetInactivityTimer, { passive: true });
-}
-
-function handlePinInput(num) {
-  if (currentPin.length < 4) {
-    currentPin += num;
-    updateDots();
-  }
-}
-
-function clearPin() {
-  currentPin = "";
-  updateDots();
-}
-
-function updateDots() {
-  dots.forEach((dot, index) => {
-    if (dot) {
-      dot.classList.toggle('active', index < currentPin.length);
-    }
-  });
+  document.addEventListener('keypress', resetInactivityTimer, { passive: true });
 }
 
 function validatePin() {
-  if (currentPin.length !== 4) return;
+  const pinInput = document.getElementById('kiosk-pin');
+  const errorMsg = document.getElementById('kiosk-error');
+  
+  if (!pinInput) return; // Programmazione difensiva
+  const currentPin = pinInput.value;
 
   const operator = OPERATOR_CACHE[currentPin];
   
   if (operator) {
+    if (errorMsg) errorMsg.classList.add('is-hidden');
     unlockTerminal(operator);
   } else {
     // Feedback visivo errore
-    lockScreen.classList.add('error-shake');
+    if (errorMsg) errorMsg.classList.remove('is-hidden');
+    pinInput.value = ""; // Svuota il campo per riprovare
+    pinInput.focus();
+    
+    // Nascondi l'errore dopo 2 secondi
     setTimeout(() => {
-      lockScreen.classList.remove('error-shake');
-      clearPin();
-    }, 400);
+      if (errorMsg) errorMsg.classList.add('is-hidden');
+    }, 2000);
   }
 }
 
 function unlockTerminal(operator) {
-  lockScreen.classList.add('is-hidden');
-  appContent.style.display = 'block';
-  
-  if (operatorInfo) {
-    operatorInfo.textContent = `Operatore: ${operator.name} | Sessione: ${operator.role.toUpperCase()}`;
-  }
-  
-  // Applica restrizioni di sicurezza in base al ruolo
+  const lockScreen = document.getElementById('kiosk-overlay');
+  const pinInput = document.getElementById('kiosk-pin');
+
+  // Sblocco dell'interfaccia
+  if (lockScreen) lockScreen.classList.add('is-hidden');
+  if (pinInput) pinInput.value = ""; // Pulisce il PIN dalla memoria visiva
+
+  // Gestione permessi e ruoli
   const btnNuova = document.getElementById('btn-nuova');
   if (operator.role === 'operator' && btnNuova) {
-    btnNuova.remove(); // Un operatore semplice non può creare nuove ricette
+    btnNuova.style.display = 'none'; // Un operatore semplice non può creare nuove ricette
+  } else if (btnNuova) {
+    btnNuova.style.display = 'inline-block'; // Ripristina per i tecnici
   }
 
   resetInactivityTimer();
-  clearPin();
   console.log(`[AUTH] Accesso garantito a ${operator.name}`);
 }
 
 export function lockTerminal() {
-  lockScreen.classList.remove('is-hidden');
-  appContent.style.display = 'none';
+  const lockScreen = document.getElementById('kiosk-overlay');
+  if (lockScreen) {
+    lockScreen.classList.remove('is-hidden');
+    const pinInput = document.getElementById('kiosk-pin');
+    if (pinInput) {
+      pinInput.value = "";
+      // Leggera pausa per permettere al DOM di riattivarsi prima di forzare il focus
+      setTimeout(() => pinInput.focus(), 100); 
+    }
+  }
   clearTimeout(sessionTimeout);
 }
 
 function resetInactivityTimer() {
-  if (lockScreen.classList.contains('is-hidden')) {
+  const lockScreen = document.getElementById('kiosk-overlay');
+  
+  // FIX CRITICO ALLA RIGA 108: Programmazione difensiva contro i null.
+  // Controlla che lockScreen esista prima di cercare le sue classi.
+  if (lockScreen && lockScreen.classList.contains('is-hidden')) {
     clearTimeout(sessionTimeout);
     sessionTimeout = setTimeout(() => {
       lockTerminal();
