@@ -1,5 +1,3 @@
-/* css/styles.css - Design System Industriale */
-
 :root {
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
@@ -14,119 +12,33 @@
   --border: #cbd5e1;
 }
 
-* {
-  box-sizing: border-box;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  background-color: var(--bg);
-  color: var(--text);
-  overflow: hidden; /* Blocca lo scroll della pagina intera, scrollano solo le sezioni */
-}
-
-/* ==========================================
-   UTILITY
-   ========================================== */
+* { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+body { margin: 0; padding: 0; background-color: var(--bg); color: var(--text); overflow: hidden; }
 .is-hidden { display: none !important; }
 
-/* ==========================================
-   KIOSK MODAL (Schermata di Sblocco)
-   ========================================== */
-.kiosk-overlay {
-  position: fixed;
-  inset: 0;
-  background: #0f172a; /* Sfondo scuro per il blocco */
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.kiosk-modal {
-  background: var(--surface);
-  padding: 2.5rem;
-  border-radius: 12px;
-  text-align: center;
-  max-width: 450px;
-  width: 90%;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-}
-
+/* OVERLAY KIOSK */
+.kiosk-overlay { position: fixed; inset: 0; background: #0f172a; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.kiosk-modal { background: var(--surface); padding: 2.5rem; border-radius: 12px; text-align: center; max-width: 450px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
 .kiosk-modal h2 { margin-top: 0; color: var(--text); font-size: 1.8rem; }
 .kiosk-modal p { color: var(--text-muted); margin-bottom: 2rem; }
-#kiosk-pin { width: 100%; border: 2px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
-#kiosk-pin:focus { border-color: var(--primary); outline: none; }
 .error-text { color: var(--danger); font-weight: bold; margin-bottom: 1rem; display: block; }
 
-/* ==========================================
-   LAYOUT PRINCIPALE (Split Screen)
-   ========================================== */
-.app-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-
-.app-header {
-  background: var(--primary);
-  color: white;
-  padding: 1rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-  z-index: 10;
-}
-
+/* STRUTTURA */
+.app-container { display: flex; flex-direction: column; height: 100vh; }
+.app-header { background: var(--primary); color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); z-index: 10; }
 .header-title h1 { margin: 0; font-size: 1.4rem; }
 .badge { background: rgba(255,255,255,0.2); padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.85rem; margin-top: 0.2rem; display: inline-block; }
 .header-actions { display: flex; gap: 0.5rem; }
+.main-content { display: flex; flex: 1; overflow: hidden; }
 
-.main-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* ==========================================
-   COLONNA SINISTRA: LISTA RICETTE
-   ========================================== */
-.list-section {
-  width: 380px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
-
-.list-header {
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--light);
-}
-
+/* LISTA SX */
+.list-section { width: 380px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.list-header { padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--light); }
 .list-header h2 { margin: 0; font-size: 1.1rem; color: var(--text); }
 .lista-lavorazioni { overflow-y: auto; flex: 1; }
-
-.riga-lavorazione {
-  padding: 1.2rem;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  transition: background 0.2s;
-}
-
+.riga-lavorazione { padding: 1.2rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 0.8rem; }
 .riga-lavorazione:hover { background: var(--light); }
 .riga-lavorazione.active { background: #eff6ff; border-left: 5px solid var(--primary); padding-left: calc(1.2rem - 5px); }
-
 .riga-left-content { display: flex; gap: 1rem; align-items: center; }
 .riga-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
 .riga-lavorazione-info { display: flex; flex-direction: column; }
@@ -134,282 +46,79 @@ body {
 .riga-sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem; }
 .badge-gioco { background: var(--surface); padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; border: 1px solid var(--border); align-self: flex-start; }
 
-/* ==========================================
-   COLONNA DESTRA: FORM E OCR
-   ========================================== */
-.form-section {
-  flex: 1;
-  overflow-y: auto;
-  padding: 2rem;
-  background: var(--bg);
-}
-
-.card {
-  background: var(--surface);
-  padding: 2.5rem;
-  border-radius: 12px;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  border-bottom: 2px solid var(--bg);
-  padding-bottom: 1rem;
-}
-
+/* FORM DX */
+.form-section { flex: 1; overflow-y: auto; padding: 2rem; background: var(--bg); }
+.card { background: var(--surface); padding: 2.5rem; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); max-width: 900px; margin: 0 auto; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 2px solid var(--bg); padding-bottom: 1rem; }
 .card-header h2 { margin: 0; color: var(--text); }
 .section-divider { margin-top: 2.5rem; margin-bottom: 1.5rem; color: var(--primary); font-size: 1.3rem; border-bottom: 1px solid var(--bg); padding-bottom: 0.5rem; }
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-}
-
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 .form-group.full { grid-column: span 2; }
 label { display: block; font-weight: 600; margin-bottom: 0.5rem; font-size: 0.95rem; color: var(--text); }
+input, select { width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; background: var(--surface); color: var(--text); }
 
-input, select {
-  width: 100%;
-  padding: 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 1rem;
-  background: var(--surface);
-  color: var(--text);
-}
-
-input:focus, select:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.2);
-}
-
-/* ==========================================
-   PULSANTI
-   ========================================== */
-.btn {
-  padding: 0.8rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: bold;
-  font-size: 1rem;
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.2s;
-}
-
+/* PULSANTI */
+.btn { padding: 0.8rem 1.5rem; border: none; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; text-align: center; transition: all 0.2s; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-primary { background: var(--primary); color: white; }
 .btn-primary:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
 .btn-secondary { background: var(--secondary); color: white; }
 .btn-light { background: var(--light); color: var(--text); border: 1px solid var(--border); }
-.btn-light:hover:not(:disabled) { background: var(--bg); }
 .btn-danger { background: var(--danger); color: white; }
 .btn-warning { background: var(--warning); color: #fff; }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.9rem; }
 .form-actions { display: flex; gap: 1rem; margin-top: 2rem; }
 
-/* ==========================================
-   OCR E DISEGNO TECNICO
-   ========================================== */
 .drawing-controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .drawing-controls input[type="text"] { flex: 1; }
-.drawing-preview {
-  background: var(--light);
-  padding: 1rem;
-  border-radius: 8px;
-  text-align: center;
-  min-height: 250px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px dashed var(--border);
-}
+.drawing-preview { background: var(--light); padding: 1rem; border-radius: 8px; text-align: center; min-height: 250px; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--border); }
 
-.ocr-chips-wrapper button {
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
+/* ENGINE LENS POPUP */
+#drawing-image { cursor: zoom-in; transition: transform 0.2s; }
+#drawing-image:hover { transform: scale(1.01); }
+.zoom-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 10000; display: flex; flex-direction: column; overflow: auto; }
+.btn-close-zoom { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 10001; padding: 0.8rem 1.5rem; font-size: 1.1rem; font-weight: bold; background: var(--danger); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+.zoom-container { position: relative; margin: auto; padding: 6rem 1rem 2rem 1rem; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
+#zoomed-image { max-width: none; width: 100%; min-width: 900px; height: auto; display: block; background: white; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+#zoomed-ocr-overlay { position: absolute; pointer-events: none; }
 
-/* ==========================================
-   MODALE ZOOM IMMAGINE (POPUP)
-   ========================================== */
-#drawing-image {
-  cursor: zoom-in; /* Fa capire all'operatore che può cliccare */
-  transition: transform 0.2s;
-}
-#drawing-image:hover {
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
+/* Sensori invisibili stile Lens */
+.lens-box { position: absolute; pointer-events: auto; cursor: pointer; border-radius: 4px; transition: background 0.1s; }
+.lens-box.active { border: 2px solid #ffffff; background: rgba(255, 255, 255, 0.25); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
 
-.zoom-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.95); /* Sfondo quasi nero */
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  overflow: auto; /* Permette di scorrere immagini enormi */
-}
+/* Menu Fluttuante Lens */
+#lens-context-menu { position: absolute; background: #ffffff; border-radius: 12px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5); z-index: 10005; display: flex; flex-direction: column; overflow: hidden; transform: translate(-50%, -125%); min-width: 180px; animation: lensPop 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+@keyframes lensPop { from { transform: translate(-50%, -110%) scale(0.9); opacity: 0; } to { transform: translate(-50%, -125%) scale(1); opacity: 1; } }
+#btn-lens-copy { padding: 14px 20px; border: none; background: transparent; font-size: 1.1rem; color: #0f172a; display: flex; align-items: center; gap: 12px; cursor: pointer; font-weight: 600; }
+#btn-lens-copy:active { background: #f1f5f9; }
 
-.btn-close-zoom {
-  position: fixed;
-  top: 1.5rem;
-  right: 1.5rem;
-  z-index: 10001;
-  padding: 0.8rem 1.5rem;
-  font-size: 1.1rem;
-  font-weight: bold;
-  background: var(--danger);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-}
-
-.zoom-container {
-  position: relative;
-  margin: auto;
-  padding: 5rem 1rem 2rem 1rem; /* Spazio per il bottone di chiusura */
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  min-height: 100vh;
-}
-
-#zoomed-image {
-  max-width: none;
-  width: 100%;
-  min-width: 800px; /* Forza un'immagine grande per la selezione facile */
-  height: auto;
-  display: block;
-  background: white;
-}
-
-#zoomed-ocr-overlay {
-  position: absolute;
-  pointer-events: none; /* Lascia passare i click al contenitore */
-}
-
-/* css/styles.css - Sostituisci .zoomed-word con questo blocco */
-
-#image-zoom-modal {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 10000;
-  display: flex; flex-direction: column; overflow: auto;
-}
-
-/* IL MIRINO STILE GOOGLE LENS */
-.lens-box {
-  position: absolute;
-  border: 2px solid rgba(255, 255, 255, 0.8); /* Bordo bianco visibile */
-  background: rgba(255, 255, 255, 0.1); /* Leggermente sbiancato all'interno */
-  border-radius: 4px;
-  cursor: pointer;
-  pointer-events: auto; /* Cattura il tocco */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-  transition: all 0.15s ease-out;
-}
-
-/* Feedback al tocco */
-.lens-box:active {
-  transform: scale(0.95);
-}
-
-/* Stato "Catturato" (Verde) */
-.lens-box.captured {
-  background: rgba(34, 197, 94, 0.4);
-  border-color: #22c55e;
-  box-shadow: 0 0 15px rgba(34, 197, 94, 0.8);
-}
-
-/* Toast Notification (Messaggio a comparsa) */
-.lens-toast {
-  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-  background: var(--primary); color: white; padding: 12px 24px;
-  border-radius: 30px; font-weight: bold; font-size: 1.1rem;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 10002;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s;
-}
+.lens-toast { position: fixed; bottom: 35px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 12px 26px; border-radius: 30px; font-weight: bold; font-size: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.4); z-index: 10006; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
 .lens-toast.show { opacity: 1; }
 
-/* ==========================================
-   RESPONSIVITÀ (Smartphone VERTICALE - Sotto 600px)
-   Corregge l'impilamento orizzontale di header e lista
-   ========================================== */
-@media (max-width: 600px) {
-  /* Rendi il corpo interamente scorrevole */
-  body { overflow-y: auto; overflow-x: hidden; }
+/* RESPONSIVE DESIGN */
+@media (max-width: 900px) {
+  body { overflow: auto; }
   .app-container { height: auto; min-height: 100vh; }
   .main-content { flex-direction: column; overflow: visible; }
-
-  /* Header verticale e compatto */
-  .app-header {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 1rem;
-    gap: 0.8rem;
-  }
-  .header-title { width: 100%; text-align: center; }
-  .header-title h1 { font-size: 1.2rem; }
-  .header-actions {
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .btn { padding: 0.6rem 1rem; font-size: 0.9rem; } /* Pulsanti più piccoli */
-
-  /* Lista Ricette a larghezza intera, scorre sotto */
-  .list-section {
-    width: 100%;
-    height: auto;
-    max-height: none; /* Rimuove max-height per scorrimento libero della pagina */
-    border-right: none;
-    border-bottom: 2px solid var(--border);
-    overflow: visible; /* Lascia scorrere liberamente */
-  }
-  .list-header { padding: 1rem; }
-  .lista-lavorazioni { overflow: visible; height: auto; } /* Niente scroll interno alla lista */
-
-  /* Form scorre fluidamente sotto la lista */
+  .list-section { width: 100%; height: auto; max-height: 40vh; border-right: none; border-bottom: 2px solid var(--border); }
   .form-section { padding: 1rem; overflow: visible; }
   .card { padding: 1.2rem; }
   .form-grid { grid-template-columns: 1fr; gap: 1rem; }
   .form-group.full { grid-column: span 1; }
   .form-actions { flex-direction: column; }
-  .drawing-controls { flex-direction: column; gap: 0.5rem; }
-
-  /* FIX IMMAGINI MOZZATE SU MOBILE: Contiene la foto nel box verticale */
-  #drawing-image {
-    width: 100%;
-    height: auto;
-    max-height: 50vh; /* Limita l'altezza al 50% dello schermo per non tagliare */
-    object-fit: contain;
-  }
+  .drawing-controls { flex-direction: column; }
+  #drawing-image { width: 100%; height: auto; max-height: 380px; object-fit: contain; }
 }
 
-/* ==========================================
-   RESPONSIVITÀ (Desktop / Tablet Orizzontale - Sopra 600px)
-   Limita l'altezza dell'anteprima disegno
-   ========================================== */
-@media (min-width: 601px) {
-  /* FIX FOTO TROPPO GRANDE SU DESKTOP: Contiene l'altezza */
-  #drawing-image {
-    max-width: 100%;
-    height: auto;
-    max-height: 300px; /* Altezza massima fissa per un box compatto */
-    object-fit: contain;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-  }
-  
-  /* Rimuove overflow hidden globale per permettere scorrimento se il form è lungo */
-  body { overflow: auto; }
+@media (max-width: 600px) {
+  .app-header { flex-direction: column; align-items: flex-start; padding: 1rem; gap: 0.8rem; }
+  .header-title { width: 100%; text-align: center; }
+  .header-actions { width: 100%; justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
+  .list-section { max-height: none; overflow: visible; }
+  .lista-lavorazioni { overflow: visible; height: auto; }
+}
+
+@media (min-width: 901px) {
+  #drawing-image { max-width: 100%; height: auto; max-height: 280px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); }
+  body { overflow: hidden; }
 }
