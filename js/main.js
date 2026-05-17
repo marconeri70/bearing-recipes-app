@@ -1,8 +1,8 @@
-// js/main.js
+// js/main.js (Versione Corazzata con OCR Interattivo locale)
 
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
-import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
+import { esportaLavorazioniInCSV, analizzaImport CSV } from './api/csv-manager.js';
 
 // ==========================================
 // 1. STATO LOCALE E UTILITY
@@ -30,11 +30,73 @@ function caricaDaStorage() { const raw = localStorage.getItem(STORAGE_KEY); retu
 function leggiNumero(id) { const raw = document.getElementById(id).value; if (!raw) return null; const n = Number(raw.replace(",", ".")); return Number.isNaN(n) ? null : n; }
 
 // ==========================================
-// 2. GESTIONE INTERFACCIA (UI/DOM)
+// 2. GESTIONE INTERFACCIA (UI/DOM) E OCR INTERATTIVO
 // ==========================================
 function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
 function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
 function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
+
+// --- NUOVO SISTEMA OCR INTERATTIVO LOCALE ---
+async function inizializzaOcrInterattivo(imageSrc) {
+  const container = document.querySelector(".drawing-preview");
+  if (!container) return;
+
+  // Pulizia vecchi overlay per non intasare il DOM
+  const vecchiOverlay = container.querySelectorAll('.ocr-text-overlay');
+  vecchiOverlay.forEach(o => o.remove());
+
+  console.log("[OCR] Avvio scansione Tesseract locale per testo selezionabile...");
+
+  const imgElement = document.getElementById("drawing-image");
+  if(!imgElement) return;
+
+  try {
+    // 1. Esegui OCR su Tesseract sul tablet (scanziona solo l'immagine, non i moduli)
+    const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Local] ${m.status}: ${m.progress}`) });
+    const { words } = result.data;
+
+    if (!words || words.length === 0) return;
+
+    // 2. Calcola lo scaling tra l'immagine originale e l'immagine visualizzata sul DOM
+    const imgRatioX = imgElement.clientWidth / imgElement.naturalWidth;
+    const imgRatioY = imgElement.clientHeight / imgElement.naturalHeight;
+    const offsetX = imgElement.offsetLeft;
+    const offsetY = imgElement.offsetTop;
+
+    const overlayDiv = document.createElement("div");
+    overlayDiv.className = "ocr-text-overlay";
+    overlayDiv.style.pointerEvents = "auto"; // Permetti interazione (selezione)
+
+    // 3. Crea e posiziona ogni parola come un box di testo selezionabile
+    words.forEach(word => {
+      if (word.text.trim().length === 0) return;
+      const span = document.createElement("span");
+      span.textContent = word.text;
+      
+      // Posizionamento chirurgico Flexbox: convertiamo le coordinate dell'immagine
+      // in pixel DOM locali, applicando lo scaling corretto.
+      const style = span.style;
+      style.position = "absolute";
+      style.left = `${(word.bbox.x0 * imgRatioX) + offsetX}px`;
+      style.top = `${(word.bbox.y0 * imgRatioY) + offsetY}px`;
+      style.width = `${(word.bbox.x1 - word.bbox.x0) * imgRatioX}px`;
+      style.height = `${(word.bbox.y1 - word.bbox.y0) * imgRatioY}px`;
+      style.fontSize = `${(word.font_size * imgRatioY) * 0.8}px`; // Scaling font per non sforare
+      
+      // CSS per renderlo trasparente ma selezionabile
+      style.color = "transparent";
+      style.backgroundColor = "rgba(59, 130, 246, 0.03)"; // Giallo molto sbiadito
+      style.userSelect = "text"; 
+      
+      overlayDiv.appendChild(span);
+    });
+
+    container.appendChild(overlayDiv);
+    console.log("[OCR] Scansione interattiva completata.");
+  } catch (error) {
+    console.error("[OCR] Errore scansione locale:", error);
+  }
+}
 
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
@@ -43,13 +105,23 @@ function aggiornaDisegnoPreview(url) {
   
   if (url) {
     img.src = url; img.style.display = "block"; placeholder.style.display = "none";
-    // Mostra il tasto IA solo se l'immagine è un Base64 appena scattato dal tablet
     if (url.startsWith("data:image") && btnIA) btnIA.classList.remove("is-hidden"); 
+    // Innesca la scansione Tesseract locale appena l'immagine è caricata nel DOM
+    img.onload = () => {
+      if (url.startsWith("data:image")) inizializzaOcrInterattivo(url);
+    };
   } else {
     img.src = ""; img.style.display = "none"; placeholder.style.display = "block";
     if (btnIA) btnIA.classList.add("is-hidden");
+    const container = document.querySelector(".drawing-preview");
+    if(container) {
+      const overlay = container.querySelector('.ocr-text-overlay');
+      if(overlay) overlay.remove();
+    }
   }
 }
+
+// ... (Resto del file invariato fino a analizzaConIA) ...
 
 function aggiornaConteggio() { const label = document.getElementById("recipes-count"); if (label) label.textContent = lavorazioni.length; }
 
@@ -201,7 +273,7 @@ async function analizzaConIA() {
 
   try {
     // INSERISCI QUI IL TUO LINK CLOUDFLARE WORKER + "/analyze"
-    const WORKER_IA_URL = "https://bearing-image-router.vocidicassino.workers.dev/analyze"; 
+    const WORKER_IA_URL = "INSERISCI_IL_TUO_LINK_WORKERS_DEV_QUI/analyze"; 
 
     const response = await fetch(WORKER_IA_URL, {
       method: "POST",
