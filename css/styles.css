@@ -298,14 +298,46 @@ input:focus, select:focus {
   pointer-events: none; /* Lascia passare i click al contenitore */
 }
 
-.zoomed-word {
-  position: absolute;
-  color: transparent; /* Testo invisibile ma selezionabile */
-  background: rgba(37, 99, 235, 0.15); /* Evidenziatore azzurro leggero */
-  user-select: text; /* Abilita la selezione testo nativa del telefono */
-  pointer-events: auto; /* Cattura il dito */
-  cursor: text;
+/* css/styles.css - Sostituisci .zoomed-word con questo blocco */
+
+#image-zoom-modal {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.95); z-index: 10000;
+  display: flex; flex-direction: column; overflow: auto;
 }
+
+/* IL MIRINO STILE GOOGLE LENS */
+.lens-box {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.8); /* Bordo bianco visibile */
+  background: rgba(255, 255, 255, 0.1); /* Leggermente sbiancato all'interno */
+  border-radius: 4px;
+  cursor: pointer;
+  pointer-events: auto; /* Cattura il tocco */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  transition: all 0.15s ease-out;
+}
+
+/* Feedback al tocco */
+.lens-box:active {
+  transform: scale(0.95);
+}
+
+/* Stato "Catturato" (Verde) */
+.lens-box.captured {
+  background: rgba(34, 197, 94, 0.4);
+  border-color: #22c55e;
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.8);
+}
+
+/* Toast Notification (Messaggio a comparsa) */
+.lens-toast {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: var(--primary); color: white; padding: 12px 24px;
+  border-radius: 30px; font-weight: bold; font-size: 1.1rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 10002;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+}
+.lens-toast.show { opacity: 1; }
 
 /* ==========================================
    RESPONSIVITÀ (Smartphone VERTICALE - Sotto 600px)
