@@ -237,36 +237,76 @@ input:focus, select:focus {
 }
 
 /* ==========================================
-   RESPONSIVITÀ (Tablet e Smartphone)
+   RESPONSIVITÀ (Smartphone VERTICALE - Sotto 600px)
+   Corregge l'impilamento orizzontale di header e lista
    ========================================== */
-@media (max-width: 900px) {
-  /* Sblocca lo scorrimento naturale del telefono */
-  body { overflow: auto; }
+@media (max-width: 600px) {
+  /* Rendi il corpo interamente scorrevole */
+  body { overflow-y: auto; overflow-x: hidden; }
   .app-container { height: auto; min-height: 100vh; }
   .main-content { flex-direction: column; overflow: visible; }
-  
-  /* Adatta la lista ricette in alto, con scroll interno se sono troppe */
-  .list-section { 
-    width: 100%; 
-    height: auto; 
-    max-height: 40vh; 
-    border-right: none; 
-    border-bottom: 2px solid var(--border); 
+
+  /* Header verticale e compatto */
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem;
+    gap: 0.8rem;
   }
-  
-  /* Il form scorre fluidamente sotto */
+  .header-title { width: 100%; text-align: center; }
+  .header-title h1 { font-size: 1.2rem; }
+  .header-actions {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .btn { padding: 0.6rem 1rem; font-size: 0.9rem; } /* Pulsanti più piccoli */
+
+  /* Lista Ricette a larghezza intera, scorre sotto */
+  .list-section {
+    width: 100%;
+    height: auto;
+    max-height: none; /* Rimuove max-height per scorrimento libero della pagina */
+    border-right: none;
+    border-bottom: 2px solid var(--border);
+    overflow: visible; /* Lascia scorrere liberamente */
+  }
+  .list-header { padding: 1rem; }
+  .lista-lavorazioni { overflow: visible; height: auto; } /* Niente scroll interno alla lista */
+
+  /* Form scorre fluidamente sotto la lista */
   .form-section { padding: 1rem; overflow: visible; }
   .card { padding: 1.2rem; }
   .form-grid { grid-template-columns: 1fr; gap: 1rem; }
   .form-group.full { grid-column: span 1; }
   .form-actions { flex-direction: column; }
-  .drawing-controls { flex-direction: column; }
-  
-  /* FIX IMMAGINI MOZZATE: Contiene la foto nel box senza tagliarla */
-  #drawing-image { 
-    width: 100%; 
-    height: auto; 
-    max-height: 400px; 
-    object-fit: contain; 
+  .drawing-controls { flex-direction: column; gap: 0.5rem; }
+
+  /* FIX IMMAGINI MOZZATE SU MOBILE: Contiene la foto nel box verticale */
+  #drawing-image {
+    width: 100%;
+    height: auto;
+    max-height: 50vh; /* Limita l'altezza al 50% dello schermo per non tagliare */
+    object-fit: contain;
   }
+}
+
+/* ==========================================
+   RESPONSIVITÀ (Desktop / Tablet Orizzontale - Sopra 600px)
+   Limita l'altezza dell'anteprima disegno
+   ========================================== */
+@media (min-width: 601px) {
+  /* FIX FOTO TROPPO GRANDE SU DESKTOP: Contiene l'altezza */
+  #drawing-image {
+    max-width: 100%;
+    height: auto;
+    max-height: 300px; /* Altezza massima fissa per un box compatto */
+    object-fit: contain;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  
+  /* Rimuove overflow hidden globale per permettere scorrimento se il form è lungo */
+  body { overflow: auto; }
 }
