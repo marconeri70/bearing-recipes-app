@@ -81,6 +81,24 @@ async function eliminaDaFirestore(id) {
   }
 }
 
+async function caricaImmagineSulCloud(base64Data) {
+  // SOSTITUISCI QUESTO URL CON QUELLO DEL TUO WORKER (Quello del tasto blu "Visit")
+  const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev";
+
+  const response = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: base64Data })
+  });
+
+  if (!response.ok) {
+    throw new Error("Sincronizzazione foto fallita. Il server ha respinto il payload.");
+  }
+
+  const data = await response.json();
+  return data.url; // Ritorna il link leggerissimo di R2
+}
+
 // ==========================================
 // 4. GESTIONE INTERFACCIA (DOM) E RENDERING
 // ==========================================
