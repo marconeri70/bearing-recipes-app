@@ -1,28 +1,15 @@
 // js/main.js
 
-// ==========================================
-// 1. IMPORTAZIONE DEI MODULI (Separation of Concerns)
-// ==========================================
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
-import { analizzaScheda } from './api/vision.js';
-import { db, collection, getDocs, doc, setDoc, deleteDoc } from './api/firebase-config.js';
 
-// ==========================================
-// 2. STATO GLOBALE DELL'APPLICAZIONE
-// ==========================================
-const COLLECTION_NAME = "ricette_lavorazione";
+const STORAGE_KEY = "bearing_recipes_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
 
-// ==========================================
-// 3. FUNZIONI DI UTILITÀ E ARCHIVIAZIONE CLOUD
-// ==========================================
-function generaId() {
-  return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8);
-}
+function generaId() { return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8); }
 
 function normalizzaUrlImmagine(url) {
   if (!url) return "";
@@ -35,108 +22,25 @@ function normalizzaUrlImmagine(url) {
   return u;
 }
 
-function leggiNumero(id) {
-  const raw = document.getElementById(id).value;
-  if (!raw) return null;
-  const n = Number(raw.replace(",", "."));
-  return Number.isNaN(n) ? null : n;
-}
+function salvaSuStorage() { localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni)); }
+function caricaDaStorage() { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
+function leggiNumero(id) { const raw = document.getElementById(id).value; if (!raw) return null; const n = Number(raw.replace(",", ".")); return Number.isNaN(n) ? null : n; }
 
-// --- Operazioni CRUD asincrone su Firebase Firestore ---
-
-async function caricaDaFirestore() {
-  try {
-    console.log("[SYS] Richiesta dati a Firestore...");
-    const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
-    const dati = [];
-    querySnapshot.forEach((doc) => {
-      dati.push({ id: doc.id, ...doc.data() });
-    });
-    return dati;
-  } catch (error) {
-    console.error("[SYS] Errore critico nel download dal Cloud:", error);
-    alert("Errore di sincronizzazione: impossibile scaricare i dati dal Cloud. Verifica la rete di linea.");
-    return [];
-  }
-}
-
-async function salvaSuFirestore(lav) {
-  try {
-    const docRef = doc(db, COLLECTION_NAME, lav.id);
-    await setDoc(docRef, lav);
-    console.log(`[SYS] Documento ${lav.id} sincronizzato nel Cloud.`);
-  } catch (error) {
-    console.error("[SYS] Errore critico nel salvataggio Cloud:", error);
-    throw new Error("Sincronizzazione fallita. La ricetta NON è stata salvata nel database centrale.");
-  }
-}
-
-async function eliminaDaFirestore(id) {
-  try {
-    await deleteDoc(doc(db, COLLECTION_NAME, id));
-    console.log(`[SYS] Documento ${id} rimosso dal Cloud.`);
-  } catch (error) {
-    console.error("[SYS] Errore critico nella rimozione Cloud:", error);
-    throw new Error("Cancellazione fallita sul database centrale.");
-  }
-}
-
-async function caricaImmagineSulCloud(base64Data) {
-  // SOSTITUISCI QUESTO URL CON QUELLO DEL TUO WORKER (Quello del tasto blu "Visit")
-  const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev";
-
-  const response = await fetch(WORKER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: base64Data })
-  });
-
-  if (!response.ok) {
-    throw new Error("Sincronizzazione foto fallita. Il server ha respinto il payload.");
-  }
-
-  const data = await response.json();
-  return data.url; // Ritorna il link leggerissimo di R2
-}
-
-// ==========================================
-// 4. GESTIONE INTERFACCIA (DOM) E RENDERING
-// ==========================================
-function mostraForm() {
-  document.getElementById("card-form").classList.remove("is-hidden");
-}
-
-function nascondiForm() {
-  document.getElementById("card-form").classList.add("is-hidden");
-}
-
-function aggiornaStatoSchedaButton() {
-  const btn = document.getElementById("btn-scheda-tecnica");
-  if (btn) btn.disabled = !idCorrente;
-}
+function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
+function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
+function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
 
 function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
-  const btnAi = document.getElementById("btn-ai-extract");
-
   if (url) {
-    img.src = url;
-    img.style.display = "block";
-    placeholder.style.display = "none";
-    if (immagineCorrenteData && btnAi) btnAi.classList.remove("is-hidden");
+    img.src = url; img.style.display = "block"; placeholder.style.display = "none";
   } else {
-    img.src = "";
-    img.style.display = "none";
-    placeholder.style.display = "block";
-    if (btnAi) btnAi.classList.add("is-hidden");
+    img.src = ""; img.style.display = "none"; placeholder.style.display = "block";
   }
 }
 
-function aggiornaConteggio() {
-  const label = document.getElementById("recipes-count");
-  if (label) label.textContent = lavorazioni.length;
-}
+function aggiornaConteggio() { const label = document.getElementById("recipes-count"); if (label) label.textContent = lavorazioni.length; }
 
 function renderLista() {
   const container = document.getElementById("lista-lavorazioni");
@@ -190,7 +94,7 @@ function renderLista() {
     sub.className = "riga-sub";
     const parts = [
       [lav.irTipo, lav.orTipo].filter(Boolean).join(" | "),
-      lav.irDiametro != null ? `d=${lav.irDiametro.toString().replace('.', ',')} mm` : "",
+      lav.irDiametro != null ? `d=${lav.irDiametro} mm` : "",
       lav.classeGioco && lav.giocoMin != null ? `Gioco ${lav.classeGioco}: ${lav.giocoMin}–${lav.giocoMax} µm` : ""
     ].filter(Boolean);
     sub.textContent = parts.join(" · ");
@@ -219,9 +123,12 @@ function resetForm() {
   immagineCorrenteData = "";
   document.getElementById("form-lavorazione").reset();
   
+  // FIX CRITICO: Azzera fisicamente l'input file invisibile per forzare il ricaricamento
+  const fileInput = document.getElementById("file-galleria");
+  if(fileInput) fileInput.value = ""; 
+  
   document.getElementById("stato-modifica").textContent = "Nuova lavorazione";
   document.getElementById("btn-elimina").disabled = true;
-  
   aggiornaDisegnoPreview("");
   aggiornaStatoSchedaButton();
 }
@@ -229,22 +136,21 @@ function resetForm() {
 function caricaLavorazioneInForm(id) {
   const lav = lavorazioni.find((l) => l.id === id);
   if (!lav) return;
-
   idCorrente = id;
   document.getElementById("codice").value = lav.codice || "";
   document.getElementById("irTipo").value = lav.irTipo || "";
-  document.getElementById("irDiametro").value = lav.irDiametro !== null ? lav.irDiametro.toString().replace('.', ',') : "";
+  document.getElementById("irDiametro").value = lav.irDiametro ?? "";
   document.getElementById("orTipo").value = lav.orTipo || "";
-  document.getElementById("diametroSfera").value = lav.diametroSfera !== null ? lav.diametroSfera.toString().replace('.', ',') : "";
+  document.getElementById("diametroSfera").value = lav.diametroSfera ?? "";
   document.getElementById("numeroSfere").value = lav.numeroSfere ?? "";
   document.getElementById("gabbiaTipo").value = lav.gabbiaTipo || "";
   document.getElementById("grassoTipo").value = lav.grassoTipo || "";
   document.getElementById("schermoTipo").value = lav.schermoTipo || "";
-  document.getElementById("pesoMin").value = lav.pesoMin !== null ? lav.pesoMin.toString().replace('.', ',') : "";
-  document.getElementById("pesoMax").value = lav.pesoMax !== null ? lav.pesoMax.toString().replace('.', ',') : "";
+  document.getElementById("pesoMin").value = lav.pesoMin ?? "";
+  document.getElementById("pesoMax").value = lav.pesoMax ?? "";
   document.getElementById("classeGioco").value = lav.classeGioco || "";
-  document.getElementById("giocoMin").value = lav.giocoMin !== null ? lav.giocoMin.toString().replace('.', ',') : "";
-  document.getElementById("giocoMax").value = lav.giocoMax !== null ? lav.giocoMax.toString().replace('.', ',') : "";
+  document.getElementById("giocoMin").value = lav.giocoMin ?? "";
+  document.getElementById("giocoMax").value = lav.giocoMax ?? "";
   document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
 
   immagineCorrenteData = lav.disegnoData || "";
@@ -257,14 +163,31 @@ function caricaLavorazioneInForm(id) {
 }
 
 // ==========================================
-// 5. DELEGAZIONE LOGICA DI BUSINESS ASINCRONA
+// MOTORE UPLOAD CLOUDFLARE R2
 // ==========================================
+async function caricaImmagineSulCloud(base64Data) {
+  // INSERISCI QUI L'INDIRIZZO DEL TUO WORKER CLOUDFLARE
+  const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev/"; 
+
+  const response = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: base64Data })
+  });
+
+  if (!response.ok) {
+    throw new Error("Sincronizzazione foto fallita. Il server ha respinto il payload.");
+  }
+
+  const data = await response.json();
+  return data.url; 
+}
+
 async function gestisciSubmit(event) {
   event.preventDefault();
   const codice = document.getElementById("codice").value.trim();
   if (!codice) return alert("Inserisci il codice lavorazione (campo obbligatorio).");
 
-  // UX Industriale: Feedback visivo per evitare doppi click dell'operatore
   const btnSubmit = document.querySelector("#form-lavorazione button[type='submit']");
   const originalText = btnSubmit.textContent;
   btnSubmit.textContent = "Upload su Cloudflare R2...";
@@ -273,11 +196,8 @@ async function gestisciSubmit(event) {
   try {
     let finalImageUrl = normalizzaUrlImmagine(document.getElementById("disegnoUrl").value);
 
-    // Se l'operatore ha caricato una foto dal tablet (Base64)
     if (immagineCorrenteData && immagineCorrenteData.startsWith("data:image")) {
-      // 1. Spara la foto da 5MB al Cloudflare Worker
       finalImageUrl = await caricaImmagineSulCloud(immagineCorrenteData);
-      // 2. Distrugge la foto dalla memoria locale per non intasare il database
       immagineCorrenteData = ""; 
     }
 
@@ -297,12 +217,10 @@ async function gestisciSubmit(event) {
       classeGioco: document.getElementById("classeGioco").value || "",
       giocoMin: leggiNumero("giocoMin"),
       giocoMax: leggiNumero("giocoMax"),
-      disegnoUrl: finalImageUrl, // Salviamo SOLO il link da 50 byte
-      disegnoData: ""            // Payload Base64 azzerato (Firebase è salvo)
+      disegnoUrl: finalImageUrl, 
+      disegnoData: ""            
     };
 
-    // --- SALVATAGGIO ---
-    // (Attualmente usa lo storage locale, da qui potrai agganciare la tua funzione Firebase)
     const idx = lavorazioni.findIndex((l) => l.id === lav.id);
     if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
 
@@ -314,17 +232,29 @@ async function gestisciSubmit(event) {
   } catch (error) {
     alert("Errore critico di sistema: " + error.message);
   } finally {
-    // Sblocca il terminale
     btnSubmit.textContent = originalText;
     btnSubmit.disabled = false;
   }
 }
 
+function aggiornaGiocoIntegrato() {
+  const classe = document.getElementById("classeGioco").value;
+  const diametro = leggiNumero("irDiametro");
+  const tolleranza = calcolaTolleranze(classe, diametro);
+  if (tolleranza) {
+    document.getElementById("giocoMin").value = tolleranza.min ?? "";
+    document.getElementById("giocoMax").value = tolleranza.max ?? "";
+  } else {
+    document.getElementById("giocoMin").value = "";
+    document.getElementById("giocoMax").value = "";
+  }
+}
+
 // ==========================================
-// 6. INIT E BINDING DEGLI EVENTI
+// INIT E BINDING DEGLI EVENTI
 // ==========================================
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("[SYS] Avvio Orchestratore Cloud-Linked...");
+  console.log("[SYS] Avvio Orchestratore...");
 
   initKioskAuth();
 
@@ -340,7 +270,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  lavorazioni = await caricaDaFirestore();
+  lavorazioni = caricaDaStorage();
   renderLista();
   resetForm();
   nascondiForm();
@@ -357,21 +287,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   document.getElementById("btn-reset").addEventListener("click", resetForm);
-  
-  document.getElementById("btn-elimina").addEventListener("click", async () => {
-    if (!idCorrente || !confirm("Vuoi davvero eliminare questa lavorazione dal Cloud centralizzato?")) return;
-    
-    const btnElimina = document.getElementById("btn-elimina");
-    btnElimina.disabled = true;
-    
-    try {
-      await eliminaDaFirestore(idCorrente);
-      lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
-      resetForm(); nascondiForm(); renderLista();
-    } catch (err) {
-      alert(err.message);
-      btnElimina.disabled = false;
-    }
+  document.getElementById("btn-elimina").addEventListener("click", () => {
+    if (!idCorrente || !confirm("Vuoi davvero eliminare questa lavorazione?")) return;
+    lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
+    salvaSuStorage();
+    resetForm(); nascondiForm(); renderLista();
   });
 
   document.getElementById("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
@@ -382,6 +302,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!immagineCorrenteData) aggiornaDisegnoPreview(e.target.value);
   });
 
+  // GESTIONE CORRETTA FOTOCAMERA / GALLERIA
   const fileHandler = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -393,7 +314,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       reader.readAsDataURL(file);
     }
   };
-  document.getElementById("btn-file-galleria").addEventListener("click", () => document.getElementById("file-galleria").click());
+  
+  document.getElementById("btn-file-galleria").addEventListener("click", () => {
+    document.getElementById("file-galleria").click();
+  });
   document.getElementById("file-galleria").addEventListener("change", fileHandler);
 
   document.getElementById("btn-export-csv").addEventListener("click", () => {
@@ -407,17 +331,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = async (ev) => {
+      reader.onload = (ev) => {
         try {
           const nuovi = analizzaImportCSV(ev.target.result, generaId, normalizzaUrlImmagine);
-          
-          for (const nuovo of nuovi) {
-            await salvaSuFirestore(nuovo);
-          }
-          
           lavorazioni = lavorazioni.concat(nuovi);
-          renderLista(); 
-          alert("Importazione e sincronizzazione Cloud completate.");
+          salvaSuStorage(); renderLista(); alert("Importazione completata.");
         } catch(err) { alert("Errore importazione CSV: " + err.message); }
       };
       reader.readAsText(file, "utf-8");
@@ -426,60 +344,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("btn-scheda-tecnica").addEventListener("click", () => alert("Visualizzazione scheda tecnica attivata (Modalità temporanea)"));
-
-  // ==========================================
-  // 7. BINDING INTELLIGENZA ARTIFICIALE (VISION)
-  // ==========================================
-  const btnAi = document.getElementById("btn-ai-extract");
-  if (btnAi) {
-    btnAi.addEventListener("click", async () => {
-      if (!immagineCorrenteData) return alert("Carica prima un'immagine.");
-      
-      const textOriginale = btnAi.textContent;
-      btnAi.textContent = "⏳ Analisi in corso...";
-      btnAi.disabled = true;
-
-      try {
-        const datiEstratti = await analizzaScheda(immagineCorrenteData);
-        console.log("[SYS] Dati IA estratti:", datiEstratti);
-
-        const mapCampi = {
-          "codice": datiEstratti.codice,
-          "irTipo": datiEstratti.irTipo,
-          "irDiametro": datiEstratti.irDiametro,
-          "orTipo": datiEstratti.orTipo,
-          "diametroSfera": datiEstratti.diametroSfera,
-          "numeroSfere": datiEstratti.numeroSfere,
-          "gabbiaTipo": datiEstratti.gabbiaTipo,
-          "grassoTipo": datiEstratti.grassoTipo,
-          "schermoTipo": datiEstratti.schermoTipo,
-          "pesoMin": datiEstratti.pesoMin,
-          "pesoMax": datiEstratti.pesoMax,
-          "classeGioco": datiEstratti.classeGioco
-        };
-
-        for (const [idCampo, valore] of Object.entries(mapCampi)) {
-          if (valore !== null && valore !== undefined) {
-            const el = document.getElementById(idCampo);
-            if (el) {
-              el.value = typeof valore === 'number' ? valore.toString().replace('.', ',') : valore;
-              el.style.backgroundColor = "#e0f2fe"; 
-              el.style.transition = "background-color 0.5s";
-              setTimeout(() => el.style.backgroundColor = "", 3000);
-            }
-          }
-        }
-        
-        if (datiEstratti.classeGioco && datiEstratti.irDiametro) {
-           aggiornaGiocoIntegrato();
-        }
-
-      } catch (error) {
-        alert("Errore estrazione dati: " + error.message);
-      } finally {
-        btnAi.textContent = textOriginale;
-        btnAi.disabled = false;
-      }
-    });
-  }
 });
