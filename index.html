@@ -18,7 +18,7 @@
     <div class="kiosk-modal">
       <h2>Sblocco Terminale</h2>
       <p>Inserisci il PIN operatore per accedere alla gestione ricette.</p>
-      <input type="password" id="kiosk-pin" placeholder="••••" maxlength="4" autocomplete="off" />
+      <input type="password" id="kiosk-pin" inputmode="numeric" pattern="[0-9]*" placeholder="••••" maxlength="4" autocomplete="off" style="text-align: center; font-size: 2rem; letter-spacing: 12px; font-weight: bold;" />
       <div id="kiosk-error" class="error-text is-hidden">PIN Errato. Riprovare.</div>
       <button id="btn-kiosk-unlock" class="btn btn-primary" style="width: 100%; margin-top: 15px;">Sblocca</button>
     </div>
