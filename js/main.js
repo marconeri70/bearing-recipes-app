@@ -1,4 +1,4 @@
-// js/main.js - Versione Finale di Produzione con Firebase Real-Time Sincronizzato
+// js/main.js - Versione Finale di Produzione (Fix Rendering Lista)
 
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
@@ -32,11 +32,9 @@ function normalizzaUrlImmagine(url) {
 
 // --- LOGICA DI RETE ATTIVA PER IL CLOUD SINCRONIZZATO ---
 async function salvaSuCloud(lav) {
-  // Scrittura diretta nel database Firestore centralizzato
   const docRef = doc(db, FIRESTORE_COLLECTION, lav.id);
   await setDoc(docRef, lav);
   
-  // Aggiornamento della cache locale per reattività immediata e funzionamento offline
   const idx = lavorazioni.findIndex((l) => l.id === lav.id);
   if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
@@ -44,13 +42,11 @@ async function salvaSuCloud(lav) {
 
 async function caricaDaCloud() {
   try {
-    // Scarica l'elenco completo delle ricette da Firestore
     const querySnapshot = await getDocs(collection(db, FIRESTORE_COLLECTION));
     lavorazioni = [];
     querySnapshot.forEach((doc) => {
       lavorazioni.push(doc.data());
     });
-    // Allinea la memoria locale con lo stato attuale del Cloud
     localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
   } catch (error) {
     console.error("[SYS] Rete non disponibile. Caricamento da cache locale offline:", error);
@@ -173,10 +169,10 @@ function renderLista() {
     const leftContent = document.createElement("div");
     leftContent.className = "riga-left-content";
 
+    // FIX CHIRURGICO: Rimosso il typo che causava il crash
     if (lav.disegnoUrl) {
       const thumb = document.createElement("img");
       thumb.className = "riga-thumb";
-      thumb.src = $.disegnoUrl || lav.disegnoUrl;
       thumb.src = lav.disegnoUrl;
       thumb.alt = "Disegno";
       leftContent.appendChild(thumb);
@@ -370,7 +366,6 @@ async function gestisciSubmit(event) {
       disegnoData: ""            
     };
 
-    // Chiamata asincrona al database Cloud Firestore centralizzato
     await salvaSuCloud(lav);
 
     idCorrente = lav.id;
@@ -418,7 +413,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Sincronizzazione iniziale e download in tempo reale all'avvio dell'applicazione
+  // Sincronizzazione iniziale e download in tempo reale all'avvio
   lavorazioni = await caricaDaCloud();
   renderLista();
   resetForm();
