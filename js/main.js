@@ -125,6 +125,7 @@ function apriZoomImmagine(src) {
   const modal = document.getElementById("image-zoom-modal");
   const img = document.getElementById("zoomed-image");
   const overlay = document.getElementById("zoomed-ocr-overlay");
+  const toast = document.getElementById("lens-toast");
   if(!modal || !img || !overlay) return;
 
   modal.classList.remove("is-hidden");
@@ -141,16 +142,37 @@ function apriZoomImmagine(src) {
     const ratioY = img.clientHeight / img.naturalHeight;
 
     cachedOcrWords.forEach(word => {
-      if (word.text.trim().length === 0) return;
-      const span = document.createElement("span");
-      span.className = "zoomed-word";
-      span.textContent = word.text;
-      span.style.left = (word.bbox.x0 * ratioX) + "px";
-      span.style.top = (word.bbox.y0 * ratioY) + "px";
-      span.style.width = ((word.bbox.x1 - word.bbox.x0) * ratioX) + "px";
-      span.style.height = ((word.bbox.y1 - word.bbox.y0) * ratioY) + "px";
-      span.style.fontSize = (word.font_size * ratioY * 0.8) + "px";
-      overlay.appendChild(span);
+      // Filtro antirumore anche nello zoom: ignoriamo i frammenti senza senso
+      const text = word.text.trim();
+      if (text.length < 2 && !/\d/.test(text)) return; 
+
+      const box = document.createElement("div");
+      box.className = "lens-box";
+      
+      // Calcolo coordinate proporzionali
+      box.style.left = (word.bbox.x0 * ratioX) + "px";
+      box.style.top = (word.bbox.y0 * ratioY) + "px";
+      box.style.width = ((word.bbox.x1 - word.bbox.x0) * ratioX) + "px";
+      box.style.height = ((word.bbox.y1 - word.bbox.y0) * ratioY) + "px";
+
+      // LOGICA "TAP TO CAPTURE" (Stile Google Lens)
+      box.addEventListener("click", () => {
+        // 1. Copia negli appunti
+        navigator.clipboard.writeText(text);
+        
+        // 2. Feedback visivo sul box (Diventa Verde)
+        box.classList.add("captured");
+        setTimeout(() => box.classList.remove("captured"), 800);
+
+        // 3. Mostra il Toast
+        if (toast) {
+          toast.textContent = `"${text}" copiato! 📋`;
+          toast.classList.add("show");
+          setTimeout(() => toast.classList.remove("show"), 2000);
+        }
+      });
+
+      overlay.appendChild(box);
     });
   };
 }
