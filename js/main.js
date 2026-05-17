@@ -273,7 +273,7 @@ async function analizzaConIA() {
 
   try {
     // INSERISCI QUI IL TUO LINK CLOUDFLARE WORKER + "/analyze"
-    const WORKER_IA_URL = "INSERISCI_IL_TUO_LINK_WORKERS_DEV_QUI/analyze"; 
+    const WORKER_IA_URL = "https://bearing-image-router.vocidicassino.workers.dev/analyze"; 
 
     const response = await fetch(WORKER_IA_URL, {
       method: "POST",
