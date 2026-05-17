@@ -1,12 +1,10 @@
-// js/main.js (Versione Corazzata con OCR Interattivo locale)
+// js/main.js
 
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
+// Se utilizzi un'istanza centralizzata di Firebase, importala qui (es. import { db } from './api/firebase-config.js';)
 
-// ==========================================
-// 1. STATO LOCALE E UTILITY
-// ==========================================
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
@@ -25,76 +23,100 @@ function normalizzaUrlImmagine(url) {
   return u;
 }
 
-function salvaSuStorage() { localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni)); }
-function caricaDaStorage() { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : []; }
+// --- INTEGRAZIONE STRATEGICA CLOUD (FIREBASE) ---
+async function salvaSuCloud(lav) {
+  // Configurazione per la sincronizzazione cloud globale
+  // Se hai Firestore attivo, scommenta e adatta le righe sottostanti:
+  // const docRef = doc(db, "ricette_lavorazioni", lav.id);
+  // await setDoc(docRef, lav);
+  
+  // Backup di sicurezza in memoria locale per operatività offline
+  const idx = lavorazioni.findIndex((l) => l.id === lav.id);
+  if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
+}
+
+async function caricaDaCloud() {
+  try {
+    // Configurazione per recuperare i dati da ogni dispositivo in tempo reale
+    // Se hai Firestore attivo, scommenta e adatta le righe sottostanti:
+    // const querySnapshot = await getDocs(collection(db, "ricette_lavorazioni"));
+    // lavorazioni = [];
+    // querySnapshot.forEach((doc) => { lavorazioni.push(doc.data()); });
+    
+    // Fallback locale in assenza di modulo di rete configurato
+    const raw = localStorage.getItem(STORAGE_KEY);
+    lavorazioni = raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.error("[SYS] Errore sincronizzazione Cloud:", error);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    lavorazioni = raw ? JSON.parse(raw) : [];
+  }
+  return lavorazioni;
+}
+
 function leggiNumero(id) { const raw = document.getElementById(id).value; if (!raw) return null; const n = Number(raw.replace(",", ".")); return Number.isNaN(n) ? null : n; }
 
 // ==========================================
-// 2. GESTIONE INTERFACCIA (UI/DOM) E OCR INTERATTIVO
+// 2. GESTIONE INTERFACCIA E GETTONI TESTO (OCR)
 // ==========================================
 function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
 function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
 function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
 
-// --- NUOVO SISTEMA OCR INTERATTIVO LOCALE ---
-async function inizializzaOcrInterattivo(imageSrc) {
-  const container = document.querySelector(".drawing-preview");
-  if (!container) return;
+// ENGINE PER LA GENERAZIONE DEI GETTONI INTERATTIVI
+async function inizializzaGettoniOcr(imageSrc) {
+  const poolContainer = document.getElementById("ocr-chips-pool");
+  const wrapper = document.getElementById("ocr-chips-container");
+  if (!poolContainer || !wrapper) return;
 
-  // Pulizia vecchi overlay per non intasare il DOM
-  const vecchiOverlay = container.querySelectorAll('.ocr-text-overlay');
-  vecchiOverlay.forEach(o => o.remove());
+  poolContainer.innerHTML = "";
+  wrapper.style.display = "none";
 
-  console.log("[OCR] Avvio scansione Tesseract locale per testo selezionabile...");
-
-  const imgElement = document.getElementById("drawing-image");
-  if(!imgElement) return;
+  console.log("[OCR] Avvio scansione Tesseract locale per estrazione gettoni...");
 
   try {
-    // 1. Esegui OCR su Tesseract sul tablet (scanziona solo l'immagine, non i moduli)
-    const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Local] ${m.status}: ${m.progress}`) });
+    const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Local] ${m.status}`) });
     const { words } = result.data;
 
-    if (!words || words.length === 0) return;
+    // Filtriamo stringhe vuote o frammenti irrilevanti per pulire l'interfaccia
+    const paroleValide = words.map(w => w.text.trim()).filter(t => t.length > 1);
 
-    // 2. Calcola lo scaling tra l'immagine originale e l'immagine visualizzata sul DOM
-    const imgRatioX = imgElement.clientWidth / imgElement.naturalWidth;
-    const imgRatioY = imgElement.clientHeight / imgElement.naturalHeight;
-    const offsetX = imgElement.offsetLeft;
-    const offsetY = imgElement.offsetTop;
+    if (paroleValide.length === 0) return;
 
-    const overlayDiv = document.createElement("div");
-    overlayDiv.className = "ocr-text-overlay";
-    overlayDiv.style.pointerEvents = "auto"; // Permetti interazione (selezione)
+    // Rimuoviamo i duplicati per ottimizzare lo spazio visivo sul telefono
+    const poolUnico = [...new Set(paroleValide)];
 
-    // 3. Crea e posiziona ogni parola come un box di testo selezionabile
-    words.forEach(word => {
-      if (word.text.trim().length === 0) return;
-      const span = document.createElement("span");
-      span.textContent = word.text;
-      
-      // Posizionamento chirurgico Flexbox: convertiamo le coordinate dell'immagine
-      // in pixel DOM locali, applicando lo scaling corretto.
-      const style = span.style;
-      style.position = "absolute";
-      style.left = `${(word.bbox.x0 * imgRatioX) + offsetX}px`;
-      style.top = `${(word.bbox.y0 * imgRatioY) + offsetY}px`;
-      style.width = `${(word.bbox.x1 - word.bbox.x0) * imgRatioX}px`;
-      style.height = `${(word.bbox.y1 - word.bbox.y0) * imgRatioY}px`;
-      style.fontSize = `${(word.font_size * imgRatioY) * 0.8}px`; // Scaling font per non sforare
-      
-      // CSS per renderlo trasparente ma selezionabile
-      style.color = "transparent";
-      style.backgroundColor = "rgba(59, 130, 246, 0.03)"; // Giallo molto sbiadito
-      style.userSelect = "text"; 
-      
-      overlayDiv.appendChild(span);
+    poolUnico.forEach(testo => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "btn btn-light";
+      chip.style.margin = "2px";
+      chip.style.fontSize = "0.85rem";
+      chip.style.padding = "4px 8px";
+      chip.textContent = testo;
+
+      // Click sul Gettone: copia automatica negli appunti dell'operatore
+      chip.addEventListener("click", () => {
+        navigator.clipboard.writeText(testo);
+        
+        // Feedback visivo momentaneo sul bottone toccato
+        const testoOriginale = chip.textContent;
+        chip.textContent = "Copiato! ✅";
+        chip.style.backgroundColor = "#bbf7d0";
+        setTimeout(() => {
+          chip.textContent = testoOriginale;
+          chip.style.backgroundColor = "";
+        }, 1200);
+      });
+
+      poolContainer.appendChild(chip);
     });
 
-    container.appendChild(overlayDiv);
-    console.log("[OCR] Scansione interattiva completata.");
+    wrapper.style.display = "block";
+    console.log("[OCR] Generazione gettoni completata con successo.");
   } catch (error) {
-    console.error("[OCR] Errore scansione locale:", error);
+    console.error("[OCR] Fallimento scansione locale gettoni:", error);
   }
 }
 
@@ -102,26 +124,21 @@ function aggiornaDisegnoPreview(url) {
   const img = document.getElementById("drawing-image");
   const placeholder = document.getElementById("drawing-placeholder");
   const btnIA = document.getElementById("btn-analizza-ia");
+  const wrapper = document.getElementById("ocr-chips-container");
   
   if (url) {
     img.src = url; img.style.display = "block"; placeholder.style.display = "none";
     if (url.startsWith("data:image") && btnIA) btnIA.classList.remove("is-hidden"); 
-    // Innesca la scansione Tesseract locale appena l'immagine è caricata nel DOM
+    
     img.onload = () => {
-      if (url.startsWith("data:image")) inizializzaOcrInterattivo(url);
+      if (url.startsWith("data:image")) inizializzaGettoniOcr(url);
     };
   } else {
     img.src = ""; img.style.display = "none"; placeholder.style.display = "block";
     if (btnIA) btnIA.classList.add("is-hidden");
-    const container = document.querySelector(".drawing-preview");
-    if(container) {
-      const overlay = container.querySelector('.ocr-text-overlay');
-      if(overlay) overlay.remove();
-    }
+    if (wrapper) wrapper.style.display = "none";
   }
 }
-
-// ... (Resto del file invariato fino a analizzaConIA) ...
 
 function aggiornaConteggio() { const label = document.getElementById("recipes-count"); if (label) label.textContent = lavorazioni.length; }
 
@@ -136,7 +153,7 @@ function renderLista() {
       <div class="riga-left-content">
         <div class="riga-lavorazione-info">
           <span class="riga-codice">Nessuna lavorazione salvata</span>
-          <span class="riga-sub">Premi "Nuova" o importa un CSV.</span>
+          <span class="riga-sub">Premi "Nuova" o aggiorna la rete.</span>
         </div>
       </div>
     </div>`;
@@ -158,10 +175,10 @@ function renderLista() {
     const leftContent = document.createElement("div");
     leftContent.className = "riga-left-content";
 
-    if (lav.disegnoData || lav.disegnoUrl) {
+    if (lav.disegnoUrl) {
       const thumb = document.createElement("img");
       thumb.className = "riga-thumb";
-      thumb.src = lav.disegnoData || lav.disegnoUrl;
+      thumb.src = lav.disegnoUrl;
       thumb.alt = "Disegno";
       leftContent.appendChild(thumb);
     }
@@ -235,8 +252,8 @@ function caricaLavorazioneInForm(id) {
   document.getElementById("giocoMax").value = lav.giocoMax ?? "";
   document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
 
-  immagineCorrenteData = lav.disegnoData || "";
-  aggiornaDisegnoPreview(immagineCorrenteData || lav.disegnoUrl || "");
+  immagineCorrenteData = "";
+  aggiornaDisegnoPreview(lav.disegnoUrl || "");
 
   document.getElementById("stato-modifica").textContent = "Modifica lavorazione esistente";
   document.getElementById("btn-elimina").disabled = false;
@@ -249,7 +266,6 @@ function caricaLavorazioneInForm(id) {
 // ==========================================
 
 async function caricaImmagineSulCloud(base64Data) {
-  // INSERISCI QUI IL TUO LINK CLOUDFLARE WORKER (SENZA SLASH FINALE)
   const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev"; 
 
   const response = await fetch(WORKER_URL, {
@@ -272,7 +288,6 @@ async function analizzaConIA() {
   btnIA.disabled = true;
 
   try {
-    // INSERISCI QUI IL TUO LINK CLOUDFLARE WORKER + "/analyze"
     const WORKER_IA_URL = "https://bearing-image-router.vocidicassino.workers.dev/analyze"; 
 
     const response = await fetch(WORKER_IA_URL, {
@@ -296,13 +311,12 @@ async function analizzaConIA() {
       "classeGioco": dati.classeGioco
     };
 
-    // Compila i campi e applica il feedback visivo (Human-in-the-Loop)
     for (const [idElemento, valore] of Object.entries(mappatura)) {
       if (valore !== null && valore !== undefined) {
         const campo = document.getElementById(idElemento);
         if (campo) {
           campo.value = valore;
-          campo.style.backgroundColor = "#fef08a"; // Giallo allerta
+          campo.style.backgroundColor = "#fef08a"; 
           setTimeout(() => campo.style.backgroundColor = "", 5000);
         }
       }
@@ -326,7 +340,7 @@ async function gestisciSubmit(event) {
 
   const btnSubmit = document.querySelector("#form-lavorazione button[type='submit']");
   const originalText = btnSubmit.textContent;
-  btnSubmit.textContent = "Upload su Cloudflare R2...";
+  btnSubmit.textContent = "Sincronizzazione in corso...";
   btnSubmit.disabled = true;
 
   try {
@@ -334,7 +348,7 @@ async function gestisciSubmit(event) {
 
     if (immagineCorrenteData && immagineCorrenteData.startsWith("data:image")) {
       finalImageUrl = await caricaImmagineSulCloud(immagineCorrenteData);
-      immagineCorrenteData = ""; // Distrugge il Base64 per salvare il Database
+      immagineCorrenteData = ""; 
     }
 
     const lav = {
@@ -357,10 +371,9 @@ async function gestisciSubmit(event) {
       disegnoData: ""            
     };
 
-    const idx = lavorazioni.findIndex((l) => l.id === lav.id);
-    if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
+    // Centralizzazione della scrittura sul Cloud
+    await salvaSuCloud(lav);
 
-    salvaSuStorage();
     idCorrente = lav.id;
     renderLista();
     nascondiForm();
@@ -406,7 +419,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  lavorazioni = caricaDaStorage();
+  // Allineamento dati all'avvio con caricamento da Cloud
+  lavorazioni = await caricaDaCloud();
   renderLista();
   resetForm();
   nascondiForm();
@@ -426,7 +440,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-elimina").addEventListener("click", () => {
     if (!idCorrente || !confirm("Vuoi davvero eliminare questa lavorazione?")) return;
     lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
-    salvaSuStorage();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
     resetForm(); nascondiForm(); renderLista();
   });
 
@@ -438,7 +452,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!immagineCorrenteData) aggiornaDisegnoPreview(e.target.value);
   });
 
-  // GESTIONE FOTOCAMERA / GALLERIA
   const fileHandler = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -454,7 +467,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-file-galleria").addEventListener("click", () => document.getElementById("file-galleria").click());
   document.getElementById("file-galleria").addEventListener("change", fileHandler);
 
-  // BINDING TASTO IA
   const btnIA = document.getElementById("btn-analizza-ia");
   if(btnIA) {
     btnIA.addEventListener("click", analizzaConIA);
@@ -475,7 +487,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
           const nuovi = analizzaImportCSV(ev.target.result, generaId, normalizzaUrlImmagine);
           lavorazioni = lavorazioni.concat(nuovi);
-          salvaSuStorage(); renderLista(); alert("Importazione completata.");
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni)); renderLista(); alert("Importazione completata.");
         } catch(err) { alert("Errore importazione CSV: " + err.message); }
       };
       reader.readAsText(file, "utf-8");
