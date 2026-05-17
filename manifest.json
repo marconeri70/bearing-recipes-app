@@ -1,0 +1,23 @@
+{
+  "name": "Controllo Produzione SKF",
+  "short_name": "SKF Gestione",
+  "description": "App per la gestione ricette e tolleranze di linea",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e2e8f0",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "./icone/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icone/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
