@@ -1,11 +1,18 @@
-// js/main.js
+// js/main.js - Versione Finale di Produzione con Firebase Real-Time Sincronizzato
 
 import { initKioskAuth } from './api/auth.js';
 import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
 import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
-// Se utilizzi un'istanza centralizzata di Firebase, importala qui (es. import { db } from './api/firebase-config.js';)
 
+// Importazione delle chiavi di connessione e delle librerie ufficiali di Google Firestore
+import { db } from './api/firebase-config.js';
+import { collection, doc, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// ==========================================
+// 1. STATO LOCALE E UTILITY
+// ==========================================
 const STORAGE_KEY = "bearing_recipes_lavorazioni";
+const FIRESTORE_COLLECTION = "ricette_lavorazioni";
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
@@ -23,14 +30,13 @@ function normalizzaUrlImmagine(url) {
   return u;
 }
 
-// --- INTEGRAZIONE STRATEGICA CLOUD (FIREBASE) ---
+// --- LOGICA DI RETE ATTIVA PER IL CLOUD SINCRONIZZATO ---
 async function salvaSuCloud(lav) {
-  // Configurazione per la sincronizzazione cloud globale
-  // Se hai Firestore attivo, scommenta e adatta le righe sottostanti:
-  // const docRef = doc(db, "ricette_lavorazioni", lav.id);
-  // await setDoc(docRef, lav);
+  // Scrittura diretta nel database Firestore centralizzato
+  const docRef = doc(db, FIRESTORE_COLLECTION, lav.id);
+  await setDoc(docRef, lav);
   
-  // Backup di sicurezza in memoria locale per operatività offline
+  // Aggiornamento della cache locale per reattività immediata e funzionamento offline
   const idx = lavorazioni.findIndex((l) => l.id === lav.id);
   if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
@@ -38,17 +44,16 @@ async function salvaSuCloud(lav) {
 
 async function caricaDaCloud() {
   try {
-    // Configurazione per recuperare i dati da ogni dispositivo in tempo reale
-    // Se hai Firestore attivo, scommenta e adatta le righe sottostanti:
-    // const querySnapshot = await getDocs(collection(db, "ricette_lavorazioni"));
-    // lavorazioni = [];
-    // querySnapshot.forEach((doc) => { lavorazioni.push(doc.data()); });
-    
-    // Fallback locale in assenza di modulo di rete configurato
-    const raw = localStorage.getItem(STORAGE_KEY);
-    lavorazioni = raw ? JSON.parse(raw) : [];
+    // Scarica l'elenco completo delle ricette da Firestore
+    const querySnapshot = await getDocs(collection(db, FIRESTORE_COLLECTION));
+    lavorazioni = [];
+    querySnapshot.forEach((doc) => {
+      lavorazioni.push(doc.data());
+    });
+    // Allinea la memoria locale con lo stato attuale del Cloud
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
   } catch (error) {
-    console.error("[SYS] Errore sincronizzazione Cloud:", error);
+    console.error("[SYS] Rete non disponibile. Caricamento da cache locale offline:", error);
     const raw = localStorage.getItem(STORAGE_KEY);
     lavorazioni = raw ? JSON.parse(raw) : [];
   }
@@ -64,7 +69,6 @@ function mostraForm() { document.getElementById("card-form").classList.remove("i
 function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
 function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
 
-// ENGINE PER LA GENERAZIONE DEI GETTONI INTERATTIVI
 async function inizializzaGettoniOcr(imageSrc) {
   const poolContainer = document.getElementById("ocr-chips-pool");
   const wrapper = document.getElementById("ocr-chips-container");
@@ -79,12 +83,9 @@ async function inizializzaGettoniOcr(imageSrc) {
     const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Local] ${m.status}`) });
     const { words } = result.data;
 
-    // Filtriamo stringhe vuote o frammenti irrilevanti per pulire l'interfaccia
     const paroleValide = words.map(w => w.text.trim()).filter(t => t.length > 1);
-
     if (paroleValide.length === 0) return;
 
-    // Rimuoviamo i duplicati per ottimizzare lo spazio visivo sul telefono
     const poolUnico = [...new Set(paroleValide)];
 
     poolUnico.forEach(testo => {
@@ -96,11 +97,8 @@ async function inizializzaGettoniOcr(imageSrc) {
       chip.style.padding = "4px 8px";
       chip.textContent = testo;
 
-      // Click sul Gettone: copia automatica negli appunti dell'operatore
       chip.addEventListener("click", () => {
         navigator.clipboard.writeText(testo);
-        
-        // Feedback visivo momentaneo sul bottone toccato
         const testoOriginale = chip.textContent;
         chip.textContent = "Copiato! ✅";
         chip.style.backgroundColor = "#bbf7d0";
@@ -178,6 +176,7 @@ function renderLista() {
     if (lav.disegnoUrl) {
       const thumb = document.createElement("img");
       thumb.className = "riga-thumb";
+      thumb.src = $.disegnoUrl || lav.disegnoUrl;
       thumb.src = lav.disegnoUrl;
       thumb.alt = "Disegno";
       leftContent.appendChild(thumb);
@@ -340,7 +339,7 @@ async function gestisciSubmit(event) {
 
   const btnSubmit = document.querySelector("#form-lavorazione button[type='submit']");
   const originalText = btnSubmit.textContent;
-  btnSubmit.textContent = "Sincronizzazione in corso...";
+  btnSubmit.textContent = "Sincronizzazione Cloud...";
   btnSubmit.disabled = true;
 
   try {
@@ -371,7 +370,7 @@ async function gestisciSubmit(event) {
       disegnoData: ""            
     };
 
-    // Centralizzazione della scrittura sul Cloud
+    // Chiamata asincrona al database Cloud Firestore centralizzato
     await salvaSuCloud(lav);
 
     idCorrente = lav.id;
@@ -379,7 +378,7 @@ async function gestisciSubmit(event) {
     nascondiForm();
 
   } catch (error) {
-    alert("Errore critico di sistema: " + error.message);
+    alert("Errore critico di sincronizzazione: " + error.message);
   } finally {
     btnSubmit.textContent = originalText;
     btnSubmit.disabled = false;
@@ -419,7 +418,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Allineamento dati all'avvio con caricamento da Cloud
+  // Sincronizzazione iniziale e download in tempo reale all'avvio dell'applicazione
   lavorazioni = await caricaDaCloud();
   renderLista();
   resetForm();
