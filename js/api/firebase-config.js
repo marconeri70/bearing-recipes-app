@@ -1,12 +1,10 @@
 // js/api/firebase-config.js
 
-// Importazione diretta dai server Google (Versione 10.11.0)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+// 1. Importazione dei moduli Core di Firebase dal CDN ufficiale di Google
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ==========================================
-// INSERISCI QUI LE TUE CHIAVI FIREBASE
-// ==========================================
+// 2. Le tue chiavi di sicurezza (Sostituisci questi valori con i tuoi reali)
 const firebaseConfig = {
   apiKey: "AIzaSyAQxk4xo055FKow482z9d9Svw_HHZt4gKo",
   authDomain: "skf-terminal-ricette.firebaseapp.com",
@@ -16,13 +14,11 @@ const firebaseConfig = {
   appId: "1:30386766951:web:c537aca1dd756ed778c0c2"
 };
 
-// Inizializza l'app Firebase
+// 3. Inizializzazione dell'infrastruttura
 const app = initializeApp(firebaseConfig);
 
-// Inizializza e esporta il database Firestore
-export const db = getFirestore(app);
+// 4. Innesco del Database
+const db = getFirestore(app);
 
-// Esporta anche le funzioni necessarie per le query
-export { collection, getDocs, doc, setDoc, deleteDoc };
-
-console.log("[SYS] Firebase Firestore Inizializzato.");
+// 5. ESPORTAZIONE CRITICA: Permette a main.js di usare il database
+export { db };
