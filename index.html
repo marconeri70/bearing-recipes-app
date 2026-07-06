@@ -97,8 +97,10 @@
                 <label for="disegnoUrl">URL disegno / foto scheda</label>
                 <div class="drawing-controls">
                   <input type="url" id="disegnoUrl" placeholder="Incolla link Google Drive o URL immagine" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-                  <button type="button" id="btn-file-galleria" class="btn btn-light">🖼️ Galleria/Fotocamera</button>
-                  <input type="file" id="file-galleria" accept="image/*" capture="environment" style="display:none" />
+                  <button type="button" id="btn-file-galleria" class="btn btn-light">🖼️ Scegli dalla galleria</button>
+                  <input type="file" id="file-galleria" accept="image/*" style="display:none" />
+                  <button type="button" id="btn-file-camera" class="btn btn-light">📷 Scatta foto</button>
+                  <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" />
                 </div>
                 <small class="hint">Esempio Drive accettato: https://drive.google.com/file/d/ID/view. L'app lo trasforma in anteprima thumbnail.</small>
                 <div class="drawing-preview" style="position: relative;">
