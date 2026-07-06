@@ -1,4 +1,5 @@
 // js/main.js - Ricette Lavorazione Cuscinetti
+import { analizzaScheda } from "./api/vision.js";
 // Versione stabile localStorage + import CSV robusto + Google Drive thumbnail.
 
 const STORAGE_KEY = "bearing_recipes_lavorazioni_v2";
@@ -110,9 +111,17 @@ function normalizzaUrlImmagine(url) {
 function aggiornaDisegnoPreview(url) {
   const img = $("drawing-image");
   const placeholder = $("drawing-placeholder");
+  const btnIA = $("btn-analizza-ia");
   if (!img || !placeholder) return;
 
   const finalUrl = normalizzaUrlImmagine(url);
+  const isBase64Image = typeof finalUrl === "string" && finalUrl.startsWith("data:image");
+
+  if (btnIA) {
+    // L'estrazione IA funziona sulla foto caricata/scattata, non su link Drive esterni.
+    btnIA.classList.toggle("is-hidden", !isBase64Image);
+  }
+
   if (!finalUrl) {
     img.removeAttribute("src");
     img.style.display = "none";
@@ -568,6 +577,77 @@ function stampaScheda() {
   setTimeout(() => win.print(), 350);
 }
 
+function impostaCampoSePresente(id, valore) {
+  const campo = $(id);
+  if (!campo || valore === null || valore === undefined || valore === "") return false;
+  campo.value = String(valore).replace(",", ".");
+  campo.classList.add("campo-estratto");
+  setTimeout(() => campo.classList.remove("campo-estratto"), 3500);
+  return true;
+}
+
+function applicaDatiEstratti(dati) {
+  if (!dati || typeof dati !== "object") return 0;
+
+  let compilati = 0;
+  const mappa = {
+    codice: "codice",
+    irTipo: "irTipo",
+    irDiametro: "irDiametro",
+    orTipo: "orTipo",
+    diametroSfera: "diametroSfera",
+    numeroSfere: "numeroSfere",
+    gabbiaTipo: "gabbiaTipo",
+    grassoTipo: "grassoTipo",
+    schermoTipo: "schermoTipo",
+    pesoMin: "pesoMin",
+    pesoMax: "pesoMax",
+    classeGioco: "classeGioco"
+  };
+
+  Object.entries(mappa).forEach(([chiave, id]) => {
+    if (impostaCampoSePresente(id, dati[chiave])) compilati++;
+  });
+
+  if (dati.classeGioco || dati.irDiametro) {
+    aggiornaGiocoIntegrato();
+  }
+
+  return compilati;
+}
+
+async function analizzaSchedaConIA() {
+  if (!immagineCorrenteData || !immagineCorrenteData.startsWith("data:image")) {
+    alert("Per estrarre i dati devi prima scegliere una foto dalla galleria o scattare una foto. I link Drive esterni servono per visualizzare il disegno, non per l'estrazione automatica.");
+    return;
+  }
+
+  const btn = $("btn-analizza-ia");
+  const testoOriginale = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Estrazione in corso...";
+  }
+
+  try {
+    const dati = await analizzaScheda(immagineCorrenteData);
+    const compilati = applicaDatiEstratti(dati);
+    if (compilati > 0) {
+      alert(`Estrazione completata: ${compilati} campi compilati. Controlla sempre i valori prima di salvare.`);
+    } else {
+      alert("L'IA non ha trovato dati sicuri da compilare. Prova con una foto più nitida e ben illuminata.");
+    }
+  } catch (error) {
+    console.error(error);
+    alert("Estrazione dati non riuscita: " + (error.message || error));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = testoOriginale || "🤖 Estrai dati dalla scheda";
+    }
+  }
+}
+
 function caricaFileDisegno(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -645,6 +725,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     caricaFileDisegno(e.target.files[0]);
     e.target.value = "";
   });
+
+  $("btn-analizza-ia")?.addEventListener("click", analizzaSchedaConIA);
   $("btn-export-csv").addEventListener("click", exportToCSV);
   $("btn-import").addEventListener("click", () => $("file-import").click());
   $("file-import").addEventListener("change", (e) => {
