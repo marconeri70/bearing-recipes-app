@@ -1,11 +1,12 @@
 {
-  "name": "Controllo Produzione SKF",
-  "short_name": "SKF Gestione",
-  "description": "App per la gestione ricette e tolleranze di linea",
+  "name": "Ricette Lavorazione Cuscinetti",
+  "short_name": "Ricette RC",
+  "description": "App per ricette di lavorazione cuscinetti, componenti, disegni tecnici e gioco radiale",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#e2e8f0",
+  "background_color": "#071121",
   "theme_color": "#2563eb",
   "icons": [
     {
@@ -17,7 +18,8 @@
     {
       "src": "./icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

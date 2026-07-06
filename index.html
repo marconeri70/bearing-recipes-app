@@ -3,47 +3,52 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Gestione Produzione</title>
-  
-  <link rel="stylesheet" href="./css/styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <title>Ricette Lavorazione Cuscinetti</title>
 
+  <link rel="stylesheet" href="./css/styles.css" />
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#2563eb" />
-  <link rel="apple-touch-icon" href="./icone/icon-192x192.png" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
 </head>
 <body>
-
-  <div id="kiosk-overlay" class="kiosk-overlay">
+  <div id="kiosk-overlay" class="kiosk-overlay is-hidden">
     <div class="kiosk-modal">
       <h2>Sblocco Terminale</h2>
       <p>Inserisci il PIN operatore per accedere alla gestione ricette.</p>
-      <input type="password" id="kiosk-pin" inputmode="numeric" pattern="[0-9]*" placeholder="••••" maxlength="4" autocomplete="off" style="text-align: center; font-size: 2rem; letter-spacing: 12px; font-weight: bold;" />
-      <div id="kiosk-error" class="error-text is-hidden">PIN Errato. Riprovare.</div>
-      <button id="btn-kiosk-unlock" class="btn btn-primary" style="width: 100%; margin-top: 15px;">Sblocca</button>
+      <input type="password" id="kiosk-pin" inputmode="numeric" pattern="[0-9]*" placeholder="••••" maxlength="4" autocomplete="off" />
+      <div id="kiosk-error" class="error-text is-hidden">PIN errato. Riprovare.</div>
+      <button id="btn-kiosk-unlock" class="btn btn-primary">Sblocca</button>
     </div>
   </div>
 
   <div class="app-container">
     <header class="app-header">
       <div class="header-title">
-        <h1>Prospetti di Lavoro</h1>
-        <span class="badge">Linea Flex Channel</span>
+        <h1>Ricette Lavorazione Cuscinetti</h1>
+        <span class="badge">IR · OR · sfere · gabbia · grasso · gioco radiale</span>
       </div>
       <div class="header-actions">
-        <button id="btn-export-csv" class="btn btn-light" title="Esporta CSV">⬇️ Esporta</button>
-        <button id="btn-import" class="btn btn-light" title="Importa CSV">⬆️ Importa</button>
-        <input type="file" id="file-import" accept=".csv" style="display:none" />
+        <button id="btn-export-csv" class="btn btn-light" type="button">⬇️ Esporta CSV</button>
+        <button id="btn-import" class="btn btn-light" type="button">⬆️ Importa CSV</button>
+        <input type="file" id="file-import" accept=".csv,text/csv" style="display:none" />
       </div>
     </header>
 
     <main class="main-content">
       <section class="list-section">
         <div class="list-header">
-          <h2>Prospetti in memoria (<span id="recipes-count">0</span>)</h2>
-          <button id="btn-nuova" class="btn btn-primary">➕ Nuova</button>
+          <h2>Ricette in memoria (<span id="recipes-count">0</span>)</h2>
+          <button id="btn-nuova" class="btn btn-primary" type="button">➕ Nuova</button>
+        </div>
+        <div class="toolbar compact-toolbar">
+          <input id="filtro-ricette" class="search-input" type="search" placeholder="Cerca codice, IR, OR..." />
+          <select id="filtro-classe" class="search-input small-select">
+            <option value="">Tutte le classi</option>
+          </select>
         </div>
         <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
+        <p class="note">Le immagini da URL Google Drive vengono trasformate in anteprima diretta. Per molte ricette usa preferibilmente URL, non foto interne.</p>
       </section>
 
       <section class="form-section">
@@ -52,19 +57,19 @@
             <h2 id="stato-modifica">Nuova lavorazione</h2>
             <button type="button" id="btn-scheda-tecnica" class="btn btn-secondary btn-sm" disabled>📄 Scheda Tecnica</button>
           </div>
-          
-          <form id="form-lavorazione">
+
+          <form id="form-lavorazione" autocomplete="off">
             <div class="form-grid">
               <div class="form-group full">
-                <label for="codice">Codice Lavorazione (es. SKF 6204 C3) *</label>
-                <input type="text" id="codice" required placeholder="Es. SKF 6204 C3" />
+                <label for="codice">Codice lavorazione *</label>
+                <input type="text" id="codice" required placeholder="Es. BB1-2557_CA" />
               </div>
             </div>
 
             <h3 class="section-divider">Geometria e Componenti</h3>
             <div class="form-grid">
               <div class="form-group"><label for="irTipo">Tipo Anello Interno (IR)</label><input type="text" id="irTipo" /></div>
-              <div class="form-group"><label for="irDiametro">Diametro Interno (d) [mm]</label><input type="number" step="any" id="irDiametro" /></div>
+              <div class="form-group"><label for="irDiametro">Diametro foro IR d [mm]</label><input type="number" step="any" id="irDiametro" /></div>
               <div class="form-group"><label for="orTipo">Tipo Anello Esterno (OR)</label><input type="text" id="orTipo" /></div>
               <div class="form-group"><label for="diametroSfera">Diametro Sfera [mm]</label><input type="number" step="any" id="diametroSfera" /></div>
               <div class="form-group"><label for="numeroSfere">Numero Sfere</label><input type="number" id="numeroSfere" /></div>
@@ -79,44 +84,34 @@
 
             <h3 class="section-divider">Parametri di Qualità</h3>
             <div class="form-grid">
-              <div class="form-group"><label for="pesoMin">Peso Minimo [g]</label><input type="number" step="any" id="pesoMin" /></div>
-              <div class="form-group"><label for="pesoMax">Peso Massimo [g]</label><input type="number" step="any" id="pesoMax" /></div>
-              <div class="form-group">
-                <label for="classeGioco">Classe di Gioco Radiale</label>
-                <select id="classeGioco"><option value="">Seleziona...</option></select>
-              </div>
-              <div class="form-group"><label for="giocoMin">Gioco Min [µm]</label><input type="number" step="any" id="giocoMin" /></div>
-              <div class="form-group"><label for="giocoMax">Gioco Max [µm]</label><input type="number" step="any" id="giocoMax" /></div>
+              <div class="form-group"><label for="pesoMin">Peso minimo [g]</label><input type="number" step="any" id="pesoMin" /></div>
+              <div class="form-group"><label for="pesoMax">Peso massimo [g]</label><input type="number" step="any" id="pesoMax" /></div>
+              <div class="form-group"><label for="classeGioco">Classe di gioco radiale</label><select id="classeGioco"><option value="">Seleziona...</option></select></div>
+              <div class="form-group"><label for="giocoMin">Gioco min [µm]</label><input type="number" step="any" id="giocoMin" /></div>
+              <div class="form-group"><label for="giocoMax">Gioco max [µm]</label><input type="number" step="any" id="giocoMax" /></div>
             </div>
 
-            <h3 class="section-divider">Acquisizione Dati (AI & OCR)</h3>
+            <h3 class="section-divider">Disegno Tecnico</h3>
             <div class="form-grid">
               <div class="form-group full drawing-section">
-                <label>Disegno Tecnico / Foto Scheda</label>
-                
+                <label for="disegnoUrl">URL disegno / foto scheda</label>
                 <div class="drawing-controls">
-                  <input type="text" id="disegnoUrl" placeholder="URL Disegno" />
-                  <button type="button" id="btn-file-galleria" class="btn btn-light">🖼️ Fotocamera</button>
-                  <input type="file" id="file-galleria" accept="image/*" style="display:none" />
-                  <button type="button" id="btn-analizza-ia" class="btn btn-warning is-hidden">🤖 Estrai Dati (IA)</button>
+                  <input type="url" id="disegnoUrl" placeholder="Incolla link Google Drive o URL immagine" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                  <button type="button" id="btn-file-galleria" class="btn btn-light">🖼️ Galleria/Fotocamera</button>
+                  <input type="file" id="file-galleria" accept="image/*" capture="environment" style="display:none" />
                 </div>
-                
+                <small class="hint">Esempio Drive accettato: https://drive.google.com/file/d/ID/view. L'app lo trasforma in anteprima thumbnail.</small>
                 <div class="drawing-preview" style="position: relative;">
-                  <img id="drawing-image" src="" alt="Anteprima disegno" style="display:none;" />
+                  <img id="drawing-image" src="" alt="Anteprima disegno" referrerpolicy="no-referrer" style="display:none;" />
                   <div id="drawing-placeholder">Nessun disegno caricato</div>
-                </div>
-
-                <div id="ocr-chips-container" class="ocr-chips-wrapper" style="margin-top: 15px; display: none; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                  <span style="font-size: 0.85rem; color: #64748b; display: block; margin-bottom: 8px; font-weight: 600;">📋 Gettoni rapidi (Tocca per copiare):</span>
-                  <div id="ocr-chips-pool" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
                 </div>
               </div>
             </div>
 
-            <div class="form-actions" style="margin-top: 30px;">
-              <button type="button" id="btn-reset" class="btn btn-light">Svuota Campi</button>
+            <div class="form-actions">
+              <button type="button" id="btn-reset" class="btn btn-light">Svuota campi</button>
               <button type="button" id="btn-elimina" class="btn btn-danger" disabled>🗑️ Elimina</button>
-              <button type="submit" class="btn btn-primary" style="flex: 2;">💾 Salva Sincronizzato</button>
+              <button type="submit" class="btn btn-primary save-btn">💾 Salva</button>
             </div>
           </form>
         </div>
@@ -124,34 +119,70 @@
     </main>
   </div>
 
-  <div id="image-zoom-modal" class="zoom-modal is-hidden">
-    <button id="btn-close-zoom" class="btn-close-zoom">❌ Chiudi e Torna alla Ricetta</button>
-    <div class="zoom-container">
-      <img id="zoomed-image" src="" alt="Zoom Disegno" />
-      <div id="zoomed-ocr-overlay"></div>
-      
-      <div id="lens-context-menu" class="is-hidden">
-        <button id="btn-lens-copy">
-          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
-          Copia testo
-        </button>
+  <div id="scheda-modal" class="modal is-hidden" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 id="scheda-codice">Scheda tecnica</h2>
+          <p id="scheda-sub" class="sub"></p>
+        </div>
+        <div class="modal-header-actions">
+          <button id="scheda-save-pdf" class="btn btn-primary" type="button">💾 Salva PDF</button>
+          <button id="scheda-close" class="btn-icon" type="button">✖</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <section class="scheda-section">
+          <h3>Dati principali</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">IR - Tipo</span><span id="scheda-ir" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">OR - Tipo</span><span id="scheda-or" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Diametro foro IR</span><span id="scheda-ir-diametro" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Rotolamento</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">Sfere</span><span id="scheda-sfere" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Gabbia</span><span id="scheda-gabbia" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Lubrificazione & schermatura</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">Grasso</span><span id="scheda-grasso" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Schermo / Tenuta</span><span id="scheda-schermo" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Peso & gioco radiale</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">Peso</span><span id="scheda-peso" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Gioco radiale</span><span id="scheda-gioco" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Disegno tecnico</h3>
+          <div class="scheda-drawing-box">
+            <img id="scheda-drawing-image" alt="Disegno tecnico" referrerpolicy="no-referrer" />
+            <div id="scheda-drawing-placeholder" class="placeholder">Nessun disegno caricato</div>
+          </div>
+        </section>
       </div>
     </div>
   </div>
 
-  <div id="lens-toast" class="lens-toast">Testo copiato! 📋</div>
+  <div id="image-zoom-modal" class="zoom-modal is-hidden">
+    <button id="btn-close-zoom" class="btn-close-zoom" type="button">❌ Chiudi</button>
+    <div class="zoom-container"><img id="zoomed-image" src="" alt="Zoom Disegno" /></div>
+  </div>
 
   <script type="module" src="./js/main.js"></script>
-
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('[PWA] Service Worker Attivo.', reg.scope))
-          .catch(err => console.error('[PWA] Service Worker Errore:', err));
+        navigator.serviceWorker.register('./sw.js').catch(console.error);
       });
     }
   </script>
