@@ -280,8 +280,10 @@ function resetForm() {
   immagineCorrenteData = "";
   const form = $("form-lavorazione");
   if (form) form.reset();
-  const file = $("file-galleria");
-  if (file) file.value = "";
+  const fileGalleria = $("file-galleria");
+  const fileCamera = $("file-camera");
+  if (fileGalleria) fileGalleria.value = "";
+  if (fileCamera) fileCamera.value = "";
   $("stato-modifica").textContent = "Nuova lavorazione";
   $("btn-elimina").disabled = true;
   aggiornaDisegnoPreview("");
@@ -633,7 +635,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   $("btn-file-galleria").addEventListener("click", () => $("file-galleria").click());
-  $("file-galleria").addEventListener("change", (e) => caricaFileDisegno(e.target.files[0]));
+  $("file-galleria").addEventListener("change", (e) => {
+    caricaFileDisegno(e.target.files[0]);
+    e.target.value = "";
+  });
+
+  $("btn-file-camera").addEventListener("click", () => $("file-camera").click());
+  $("file-camera").addEventListener("change", (e) => {
+    caricaFileDisegno(e.target.files[0]);
+    e.target.value = "";
+  });
   $("btn-export-csv").addEventListener("click", exportToCSV);
   $("btn-import").addEventListener("click", () => $("file-import").click());
   $("file-import").addEventListener("change", (e) => {
