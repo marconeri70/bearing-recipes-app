@@ -1,228 +1,220 @@
-// js/main.js - Produzione (Firestore + IA + Google Lens Interattivo)
+// js/main.js - Ricette Lavorazione Cuscinetti
+// Versione stabile localStorage + import CSV robusto + Google Drive thumbnail.
 
-import { initKioskAuth } from './api/auth.js';
-import { inizializzaTabellaGioco, calcolaTolleranze } from './api/bearing-logic.js';
-import { esportaLavorazioniInCSV, analizzaImportCSV } from './api/csv-manager.js';
+const STORAGE_KEY = "bearing_recipes_lavorazioni_v2";
 
-import { db } from './api/firebase-config.js';
-import { collection, doc, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+const CLASSI_FALLBACK = {
+  C2: { min: 2, max: 11 },
+  CN: { min: 3, max: 18 },
+  C3: { min: 13, max: 28 },
+  C3L: { min: 14, max: 23 },
+  C3H: { min: 17, max: 43 },
+  C4: { min: 23, max: 43 },
+  C4L: { min: 22, max: 53 },
+  C4H: { min: 30, max: 35 },
+  C5: { min: 36, max: 61 },
+  C5L: { min: 35, max: 62 },
+  C5H: { min: 41, max: 71 },
+  CNL: { min: 10, max: 16 },
+  CNH: { min: 10, max: 28 }
+};
 
-const STORAGE_KEY = "bearing_recipes_lavorazioni";
-const FIRESTORE_COLLECTION = "ricette_lavorazioni";
+let tabellaGioco = [];
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
-let cachedOcrWords = []; 
+let filtroTesto = "";
+let filtroClasse = "";
 
-function generaId() { return Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 8); }
+function $(id) {
+  return document.getElementById(id);
+}
+
+function generaId() {
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
+function toNumberOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const n = Number(raw.replace(",", "."));
+  return Number.isNaN(n) ? null : n;
+}
+
+function leggiNumero(id) {
+  return toNumberOrNull($(id).value);
+}
+
+function escapeCSV(value) {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  if (/[;",\n\r]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+  return str;
+}
+
+function parseCsvLine(line, sep) {
+  const out = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === sep && !inQuotes) {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(v => v.trim());
+}
+
+function detectSeparator(firstLine) {
+  const semi = (firstLine.match(/;/g) || []).length;
+  const comma = (firstLine.match(/,/g) || []).length;
+  return semi >= comma ? ";" : ",";
+}
+
+function estraiGoogleDriveId(url) {
+  if (!url) return "";
+  const u = String(url).trim();
+  let m = u.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+  if (m && m[1]) return m[1];
+  m = u.match(/[?&]id=([^&]+)/i);
+  if (m && m[1]) return decodeURIComponent(m[1]);
+  return "";
+}
 
 function normalizzaUrlImmagine(url) {
   if (!url) return "";
-  let u = url.trim();
+  const u = String(url).trim();
   if (!u) return "";
-  const matchFile = u.match(/https?:\/\/drive\.google\.com\/file\/d\/([^/]+)\//i);
-  if (matchFile && matchFile[1]) return `https://drive.google.com/uc?export=view&id=${matchFile[1]}`;
-  const matchOpen = u.match(/https?:\/\/drive\.google\.com\/open\?id=([^&]+)/i);
-  if (matchOpen && matchOpen[1]) return `https://drive.google.com/uc?export=view&id=${matchOpen[1]}`;
+
+  const driveId = estraiGoogleDriveId(u);
+  if (driveId) {
+    // Endpoint più affidabile per <img> rispetto a /uc?export=view.
+    return `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w2000`;
+  }
+
   return u;
 }
 
-async function salvaSuCloud(lav) {
-  const docRef = doc(db, FIRESTORE_COLLECTION, lav.id);
-  await setDoc(docRef, lav);
-  
-  const idx = lavorazioni.findIndex((l) => l.id === lav.id);
-  if (idx >= 0) lavorazioni[idx] = lav; else lavorazioni.push(lav);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
-}
+function aggiornaDisegnoPreview(url) {
+  const img = $("drawing-image");
+  const placeholder = $("drawing-placeholder");
+  if (!img || !placeholder) return;
 
-async function caricaDaCloud() {
-  try {
-    const querySnapshot = await getDocs(collection(db, FIRESTORE_COLLECTION));
-    lavorazioni = [];
-    querySnapshot.forEach((doc) => { lavorazioni.push(doc.data()); });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
-  } catch (error) {
-    console.error("[SYS] Rete Cloud assente:", error);
-    const raw = localStorage.getItem(STORAGE_KEY);
-    lavorazioni = raw ? JSON.parse(raw) : [];
+  const finalUrl = normalizzaUrlImmagine(url);
+  if (!finalUrl) {
+    img.removeAttribute("src");
+    img.style.display = "none";
+    placeholder.textContent = "Nessun disegno caricato";
+    placeholder.style.display = "block";
+    return;
   }
-  return lavorazioni;
-}
 
-function leggiNumero(id) { 
-  const raw = document.getElementById(id).value; 
-  if (!raw) return null; 
-  const n = Number(raw.replace(",", ".")); 
-  return Number.isNaN(n) ? null : n; 
-}
-
-function mostraForm() { document.getElementById("card-form").classList.remove("is-hidden"); }
-function nascondiForm() { document.getElementById("card-form").classList.add("is-hidden"); }
-function aggiornaStatoSchedaButton() { const btn = document.getElementById("btn-scheda-tecnica"); if (btn) btn.disabled = !idCorrente; }
-
-async function inizializzaGettoniOcr(imageSrc) {
-  const poolContainer = document.getElementById("ocr-chips-pool");
-  const wrapper = document.getElementById("ocr-chips-container");
-  if (!poolContainer || !wrapper) return;
-
-  poolContainer.innerHTML = "";
-  wrapper.style.display = "none";
-  cachedOcrWords = [];
-
-  try {
-    const result = await Tesseract.recognize(imageSrc, 'eng', { logger: m => console.log(`[OCR-Core] ${m.status}`) });
-    cachedOcrWords = result.data.words;
-
-    const paroleValide = cachedOcrWords.map(w => w.text.trim()).filter(text => {
-      if (text.length < 2) return false;
-      if (/\d/.test(text)) return true;
-      const whitelist = ['SKF', 'CN', 'IR', 'OR', 'MAX', 'MIN', 'DIA', 'STANDARD', 'C3', 'C4'];
-      return whitelist.includes(text.toUpperCase());
-    });
-
-    if (paroleValide.length === 0) return;
-    const poolUnico = [...new Set(paroleValide)];
-
-    poolUnico.forEach(testo => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "btn btn-light";
-      chip.style.margin = "2px";
-      chip.style.fontSize = "0.85rem";
-      chip.style.padding = "5px 9px";
-      chip.textContent = testo;
-
-      chip.addEventListener("click", () => {
-        navigator.clipboard.writeText(testo);
-        const orig = chip.textContent;
-        chip.textContent = "Copiato! ✅";
-        chip.style.backgroundColor = "#bbf7d0";
-        setTimeout(() => { chip.textContent = orig; chip.style.backgroundColor = ""; }, 1200);
-      });
-      poolContainer.appendChild(chip);
-    });
-    wrapper.style.display = "block";
-  } catch (error) {
-    console.error("[OCR] Scansione fallita:", error);
-  }
-}
-
-// LOGICA GOOGLE LENS (MENU A COMPARSA AL TOCCO)
-function apriZoomImmagine(src) {
-  const modal = document.getElementById("image-zoom-modal");
-  const img = document.getElementById("zoomed-image");
-  const overlay = document.getElementById("zoomed-ocr-overlay");
-  const menu = document.getElementById("lens-context-menu");
-  const btnCopy = document.getElementById("btn-lens-copy");
-  
-  if(!modal || !img || !overlay || !menu) return;
-
-  modal.classList.remove("is-hidden");
-  img.src = src;
-
-  const spegniLens = () => {
-    document.querySelectorAll(".lens-box.active").forEach(b => b.classList.remove("active"));
-    menu.classList.add("is-hidden");
-  };
-
-  overlay.onclick = spegniLens;
+  placeholder.textContent = "Caricamento disegno...";
+  placeholder.style.display = "block";
+  img.style.display = "none";
 
   img.onload = () => {
-    overlay.innerHTML = "";
-    spegniLens();
-    
-    overlay.style.width = img.clientWidth + "px";
-    overlay.style.height = img.clientHeight + "px";
-    overlay.style.top = img.offsetTop + "px";
-    overlay.style.left = img.offsetLeft + "px";
-
-    const ratioX = img.clientWidth / img.naturalWidth;
-    const ratioY = img.clientHeight / img.naturalHeight;
-
-    cachedOcrWords.forEach(word => {
-      const text = word.text.trim();
-      if (text.length < 2 && !/\d/.test(text)) return; 
-
-      const box = document.createElement("div");
-      box.className = "lens-box";
-      
-      box.style.left = (word.bbox.x0 * ratioX) + "px";
-      box.style.top = (word.bbox.y0 * ratioY) + "px";
-      box.style.width = ((word.bbox.x1 - word.bbox.x0) * ratioX) + "px";
-      box.style.height = ((word.bbox.y1 - word.bbox.y0) * ratioY) + "px";
-
-      box.addEventListener("click", (e) => {
-        e.stopPropagation();
-        spegniLens();
-        
-        box.classList.add("active"); 
-
-        menu.style.left = (box.offsetLeft + box.clientWidth / 2) + "px";
-        menu.style.top = box.offsetTop + "px";
-        menu.classList.remove("is-hidden");
-
-        btnCopy.onclick = (event) => {
-          event.stopPropagation();
-          navigator.clipboard.writeText(text);
-          
-          const toast = document.getElementById("lens-toast");
-          if (toast) {
-            toast.textContent = `"${text}" copiato negli appunti! 📋`;
-            toast.classList.add("show");
-            setTimeout(() => toast.classList.remove("show"), 2000);
-          }
-          spegniLens();
-        };
-      });
-
-      overlay.appendChild(box);
-    });
+    placeholder.style.display = "none";
+    img.style.display = "block";
   };
+  img.onerror = () => {
+    placeholder.textContent = "Immagine non disponibile: controlla permessi Drive o URL.";
+    placeholder.style.display = "block";
+    img.style.display = "none";
+  };
+  img.src = finalUrl;
+  img.onclick = () => apriZoomImmagine(finalUrl);
+}
+
+function apriZoomImmagine(src) {
+  const modal = $("image-zoom-modal");
+  const img = $("zoomed-image");
+  if (!modal || !img || !src) return;
+  img.src = src;
+  modal.classList.remove("is-hidden");
 }
 
 function chiudiZoomImmagine() {
-  const modal = document.getElementById("image-zoom-modal");
+  const modal = $("image-zoom-modal");
   if (modal) modal.classList.add("is-hidden");
 }
 
-function aggiornaDisegnoPreview(url) {
-  const img = document.getElementById("drawing-image");
-  const placeholder = document.getElementById("drawing-placeholder");
-  const btnIA = document.getElementById("btn-analizza-ia");
-  const wrapper = document.getElementById("ocr-chips-container");
-  
-  if (url) {
-    img.src = url; img.style.display = "block"; placeholder.style.display = "none";
-    if (url.startsWith("data:image") && btnIA) btnIA.classList.remove("is-hidden"); 
-    
-    img.onclick = () => apriZoomImmagine(img.src);
+function mostraForm() {
+  const card = $("card-form");
+  if (card) card.classList.remove("is-hidden");
+}
 
-    img.onload = () => {
-      if (url.startsWith("data:image")) inizializzaGettoniOcr(url);
-    };
-  } else {
-    img.src = ""; img.style.display = "none"; placeholder.style.display = "block";
-    img.onclick = null;
-    if (btnIA) btnIA.classList.add("is-hidden");
-    if (wrapper) wrapper.style.display = "none";
+function nascondiForm() {
+  const card = $("card-form");
+  if (card) card.classList.add("is-hidden");
+}
+
+function aggiornaStatoSchedaButton() {
+  const btn = $("btn-scheda-tecnica");
+  if (btn) btn.disabled = !idCorrente;
+}
+
+function salvaSuStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
+  } catch (error) {
+    console.error(error);
+    alert("Memoria locale piena. Usa link URL per le immagini, non foto interne grandi.");
   }
 }
 
-function aggiornaConteggio() { const label = document.getElementById("recipes-count"); if (label) label.textContent = lavorazioni.length; }
+function caricaDaStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+}
+
+function aggiornaConteggio() {
+  const label = $("recipes-count");
+  if (label) label.textContent = lavorazioni.length;
+}
+
+function ricetteFiltrate() {
+  let lista = [...lavorazioni];
+  if (filtroTesto) {
+    const q = filtroTesto.toLowerCase();
+    lista = lista.filter(lav => [lav.codice, lav.irTipo, lav.orTipo, lav.gabbiaTipo, lav.schermoTipo]
+      .filter(Boolean).join(" ").toLowerCase().includes(q));
+  }
+  if (filtroClasse) lista = lista.filter(lav => lav.classeGioco === filtroClasse);
+  lista.sort((a, b) => String(a.codice || "").localeCompare(String(b.codice || "")));
+  return lista;
+}
 
 function renderLista() {
-  const container = document.getElementById("lista-lavorazioni");
+  const container = $("lista-lavorazioni");
   if (!container) return;
   container.innerHTML = "";
   aggiornaConteggio();
 
-  if (lavorazioni.length === 0) {
-    container.innerHTML = `<div class="riga-lavorazione" style="cursor: default;"><div class="riga-left-content"><div class="riga-lavorazione-info"><span class="riga-codice">Nessuna ricetta presente</span><span class="riga-sub">Premi "Nuova" o importa dati.</span></div></div></div>`;
+  const lista = ricetteFiltrate();
+  if (lista.length === 0) {
+    container.innerHTML = `<div class="riga-lavorazione empty-row"><div class="riga-lavorazione-info"><span class="riga-codice">Nessuna ricetta trovata</span><span class="riga-sub">Premi “Nuova” o modifica i filtri.</span></div></div>`;
     return;
   }
 
-  lavorazioni.forEach((lav) => {
+  lista.forEach((lav) => {
     const riga = document.createElement("div");
     riga.className = "riga-lavorazione";
     if (lav.id === idCorrente) riga.classList.add("active");
@@ -230,51 +222,55 @@ function renderLista() {
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
       mostraForm();
-      const card = document.getElementById("card-form");
-      window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
+      const card = $("card-form");
+      if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
     });
 
-    const leftContent = document.createElement("div");
-    leftContent.className = "riga-left-content";
+    const left = document.createElement("div");
+    left.className = "riga-left-content";
 
-    if (lav.disegnoUrl) {
+    const imgUrl = normalizzaUrlImmagine(lav.disegnoUrl || "");
+    if (imgUrl) {
       const thumb = document.createElement("img");
       thumb.className = "riga-thumb";
-      thumb.src = lav.disegnoUrl;
+      thumb.src = imgUrl;
       thumb.alt = "Disegno";
-      leftContent.appendChild(thumb);
+      thumb.referrerPolicy = "no-referrer";
+      left.appendChild(thumb);
     }
 
     const info = document.createElement("div");
     info.className = "riga-lavorazione-info";
-    
     const codice = document.createElement("span");
     codice.className = "riga-codice";
     codice.textContent = lav.codice || "(senza codice)";
-
     const sub = document.createElement("span");
     sub.className = "riga-sub";
     const parts = [
       [lav.irTipo, lav.orTipo].filter(Boolean).join(" | "),
       lav.irDiametro != null ? `d=${lav.irDiametro} mm` : "",
-      lav.classeGioco && lav.giocoMin != null ? `Gioco ${lav.classeGioco}: ${lav.giocoMin}–${lav.giocoMax} µm` : ""
+      lav.classeGioco ? `Gioco ${lav.classeGioco}: ${lav.giocoMin ?? "?"}–${lav.giocoMax ?? "?"} µm` : ""
     ].filter(Boolean);
     sub.textContent = parts.join(" · ");
-
-    leftContent.appendChild(info);
     info.append(codice, sub);
-    riga.appendChild(leftContent);
+    left.appendChild(info);
 
+    const actions = document.createElement("div");
+    actions.className = "riga-actions";
     if (lav.classeGioco) {
-      const badgeContainer = document.createElement("div");
-      badgeContainer.className = "riga-actions";
-      const b = document.createElement("span");
-      b.className = "badge badge-gioco";
-      b.textContent = `${lav.classeGioco}`;
-      badgeContainer.appendChild(b);
-      riga.appendChild(badgeContainer);
+      const badge = document.createElement("span");
+      badge.className = "badge badge-gioco";
+      badge.textContent = lav.classeGioco;
+      actions.appendChild(badge);
+    }
+    if (lav.disegnoUrl) {
+      const badge = document.createElement("span");
+      badge.className = "badge badge-disegno";
+      badge.textContent = "Disegno";
+      actions.appendChild(badge);
     }
 
+    riga.append(left, actions);
     container.appendChild(riga);
   });
 }
@@ -282,240 +278,376 @@ function renderLista() {
 function resetForm() {
   idCorrente = null;
   immagineCorrenteData = "";
-  document.getElementById("form-lavorazione").reset();
-  const fileInput = document.getElementById("file-galleria");
-  if(fileInput) fileInput.value = ""; 
-  document.getElementById("stato-modifica").textContent = "Nuova lavorazione";
-  document.getElementById("btn-elimina").disabled = true;
+  const form = $("form-lavorazione");
+  if (form) form.reset();
+  const file = $("file-galleria");
+  if (file) file.value = "";
+  $("stato-modifica").textContent = "Nuova lavorazione";
+  $("btn-elimina").disabled = true;
   aggiornaDisegnoPreview("");
-  aggiornaStatoSchedaButton();
-}
-
-function caricaLavorazioneInForm(id) {
-  const lav = lavorazioni.find((l) => l.id === id);
-  if (!lav) return;
-  idCorrente = id;
-  document.getElementById("codice").value = lav.codice || "";
-  document.getElementById("irTipo").value = lav.irTipo || "";
-  document.getElementById("irDiametro").value = lav.irDiametro ?? "";
-  document.getElementById("orTipo").value = lav.orTipo || "";
-  document.getElementById("diametroSfera").value = lav.diametroSfera ?? "";
-  document.getElementById("numeroSfere").value = lav.numeroSfere ?? "";
-  document.getElementById("gabbiaTipo").value = lav.gabbiaTipo || "";
-  document.getElementById("grassoTipo").value = lav.grassoTipo || "";
-  document.getElementById("schermoTipo").value = lav.schermoTipo || "";
-  document.getElementById("pesoMin").value = lav.pesoMin ?? "";
-  document.getElementById("pesoMax").value = lav.pesoMax ?? "";
-  document.getElementById("classeGioco").value = lav.classeGioco || "";
-  document.getElementById("giocoMin").value = lav.giocoMin ?? "";
-  document.getElementById("giocoMax").value = lav.giocoMax ?? "";
-  document.getElementById("disegnoUrl").value = lav.disegnoUrl || "";
-
-  immagineCorrenteData = "";
-  aggiornaDisegnoPreview(lav.disegnoUrl || "");
-
-  document.getElementById("stato-modifica").textContent = "Modifica lavorazione esistente";
-  document.getElementById("btn-elimina").disabled = false;
   aggiornaStatoSchedaButton();
   renderLista();
 }
 
-async function caricaImmagineSulCloud(base64Data) {
-  const WORKER_URL = "https://bearing-image-router.vocidicassino.workers.dev"; 
-  const response = await fetch(WORKER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: base64Data })
-  });
-  if (!response.ok) throw new Error("Sincronizzazione foto fallita su Cloudflare R2.");
-  const data = await response.json();
-  return data.url; 
+function caricaLavorazioneInForm(id) {
+  const lav = lavorazioni.find(l => l.id === id);
+  if (!lav) return;
+  idCorrente = id;
+  $("codice").value = lav.codice || "";
+  $("irTipo").value = lav.irTipo || "";
+  $("irDiametro").value = lav.irDiametro ?? "";
+  $("orTipo").value = lav.orTipo || "";
+  $("diametroSfera").value = lav.diametroSfera ?? "";
+  $("numeroSfere").value = lav.numeroSfere ?? "";
+  $("gabbiaTipo").value = lav.gabbiaTipo || "";
+  $("grassoTipo").value = lav.grassoTipo || "";
+  $("schermoTipo").value = lav.schermoTipo || "";
+  $("pesoMin").value = lav.pesoMin ?? "";
+  $("pesoMax").value = lav.pesoMax ?? "";
+  $("classeGioco").value = lav.classeGioco || "";
+  $("giocoMin").value = lav.giocoMin ?? "";
+  $("giocoMax").value = lav.giocoMax ?? "";
+  $("disegnoUrl").value = lav.disegnoUrl || "";
+  immagineCorrenteData = lav.disegnoData || "";
+  aggiornaDisegnoPreview(immagineCorrenteData || lav.disegnoUrl || "");
+  $("stato-modifica").textContent = "Modifica lavorazione esistente";
+  $("btn-elimina").disabled = false;
+  aggiornaStatoSchedaButton();
+  renderLista();
 }
 
-async function analizzaConIA() {
-  if (!immagineCorrenteData) return alert("Carica prima un'immagine.");
-  const btnIA = document.getElementById("btn-analizza-ia");
-  const originalText = btnIA.textContent;
-  btnIA.textContent = "⏳ Estrattore IA Attivo...";
-  btnIA.disabled = true;
-
-  try {
-    const WORKER_IA_URL = "https://bearing-image-router.vocidicassino.workers.dev/analyze"; 
-    const response = await fetch(WORKER_IA_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: immagineCorrenteData })
-    });
-
-    if (!response.ok) throw new Error("Errore durante l'estrazione assistita.");
-    const dati = await response.json();
-
-    const mappatura = {
-      "codice": dati.codice, "irDiametro": dati.irDiametro, "diametroSfera": dati.diametroSfera,
-      "numeroSfere": dati.numeroSfere, "pesoMin": dati.pesoMin, "pesoMax": dati.pesoMax,
-      "giocoMin": dati.giocoMin, "giocoMax": dati.giocoMax, "classeGioco": dati.classeGioco
-    };
-
-    for (const [idElemento, valore] of Object.entries(mappatura)) {
-      if (valore !== null && valore !== undefined) {
-        const campo = document.getElementById(idElemento);
-        if (campo) {
-          campo.value = valore;
-          campo.style.backgroundColor = "#fef08a"; 
-          setTimeout(() => campo.style.backgroundColor = "", 4000);
-        }
-      }
-    }
-  } catch (error) {
-    alert("Analisi IA fallita: " + error.message);
-  } finally {
-    btnIA.textContent = originalText; btnIA.disabled = false;
-  }
+function leggiDatiForm() {
+  const rawUrl = $("disegnoUrl").value;
+  const finalUrl = normalizzaUrlImmagine(rawUrl);
+  $("disegnoUrl").value = finalUrl;
+  return {
+    id: idCorrente || generaId(),
+    codice: $("codice").value.trim(),
+    irTipo: $("irTipo").value.trim(),
+    irDiametro: leggiNumero("irDiametro"),
+    orTipo: $("orTipo").value.trim(),
+    diametroSfera: leggiNumero("diametroSfera"),
+    numeroSfere: leggiNumero("numeroSfere"),
+    gabbiaTipo: $("gabbiaTipo").value.trim(),
+    grassoTipo: $("grassoTipo").value.trim(),
+    schermoTipo: $("schermoTipo").value.trim(),
+    pesoMin: leggiNumero("pesoMin"),
+    pesoMax: leggiNumero("pesoMax"),
+    classeGioco: $("classeGioco").value,
+    giocoMin: leggiNumero("giocoMin"),
+    giocoMax: leggiNumero("giocoMax"),
+    disegnoUrl: finalUrl,
+    // Salvo data solo se immagine caricata da file. Consiglio: usare URL per molte ricette.
+    disegnoData: immagineCorrenteData || ""
+  };
 }
 
-async function gestisciSubmit(event) {
+function gestisciSubmit(event) {
   event.preventDefault();
-  const codice = document.getElementById("codice").value.trim();
-  if (!codice) return alert("Inserisci il codice lavorazione.");
+  const lav = leggiDatiForm();
+  if (!lav.codice) return alert("Inserisci il codice lavorazione.");
+  const idx = lavorazioni.findIndex(l => l.id === lav.id);
+  if (idx >= 0) lavorazioni[idx] = lav;
+  else lavorazioni.push(lav);
+  idCorrente = lav.id;
+  salvaSuStorage();
+  renderLista();
+  nascondiForm();
+  alert("Lavorazione salvata.");
+}
 
-  const btnSubmit = document.querySelector("#form-lavorazione button[type='submit']");
-  const originalText = btnSubmit.textContent;
-  btnSubmit.textContent = "Sincronizzazione Rete Cloud...";
-  btnSubmit.disabled = true;
+function eliminaCorrente() {
+  if (!idCorrente) return alert("Nessuna lavorazione selezionata.");
+  const lav = lavorazioni.find(l => l.id === idCorrente);
+  if (!confirm(`Eliminare “${lav?.codice || idCorrente}”?`)) return;
+  lavorazioni = lavorazioni.filter(l => l.id !== idCorrente);
+  salvaSuStorage();
+  resetForm();
+  nascondiForm();
+}
 
+async function inizializzaTabellaGioco() {
   try {
-    let finalImageUrl = normalizzaUrlImmagine(document.getElementById("disegnoUrl").value);
-
-    if (immagineCorrenteData && immagineCorrenteData.startsWith("data:image")) {
-      finalImageUrl = await caricaImmagineSulCloud(immagineCorrenteData);
-      immagineCorrenteData = ""; 
-    }
-
-    const lav = {
-      id: idCorrente || generaId(),
-      codice,
-      irTipo: document.getElementById("irTipo").value.trim(),
-      irDiametro: leggiNumero("irDiametro"),
-      orTipo: document.getElementById("orTipo").value.trim(),
-      diametroSfera: leggiNumero("diametroSfera"),
-      numeroSfere: leggiNumero("numeroSfere"),
-      gabbiaTipo: document.getElementById("gabbiaTipo").value.trim(),
-      grassoTipo: document.getElementById("grassoTipo").value.trim(),
-      schermoTipo: document.getElementById("schermoTipo").value.trim(),
-      pesoMin: leggiNumero("pesoMin"),
-      pesoMax: leggiNumero("pesoMax"),
-      classeGioco: document.getElementById("classeGioco").value || "",
-      giocoMin: leggiNumero("giocoMin"),
-      giocoMax: leggiNumero("giocoMax"),
-      disegnoUrl: finalImageUrl, 
-      disegnoData: ""            
-    };
-
-    await salvaSuCloud(lav);
-    idCorrente = lav.id;
-    renderLista();
-    nascondiForm();
+    const resp = await fetch("./tabella_gioco.csv", { cache: "no-store" });
+    if (!resp.ok) throw new Error("CSV gioco non trovato");
+    const text = await resp.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return Object.keys(CLASSI_FALLBACK).sort();
+    const sep = detectSeparator(lines[0]);
+    const header = parseCsvLine(lines[0], sep);
+    const idx = name => header.indexOf(name);
+    tabellaGioco = lines.slice(1).map(line => {
+      const p = parseCsvLine(line, sep);
+      return {
+        dMin: toNumberOrNull(p[idx("d_min")]),
+        dMax: toNumberOrNull(p[idx("d_max")]),
+        classe: p[idx("classe")] || "",
+        giocoMin: toNumberOrNull(p[idx("gioco_min")]),
+        giocoMax: toNumberOrNull(p[idx("gioco_max")])
+      };
+    }).filter(r => r.classe);
+    return Array.from(new Set(tabellaGioco.map(r => r.classe))).sort();
   } catch (error) {
-    alert("Errore critico di sincronizzazione Firestore: " + error.message);
-  } finally {
-    btnSubmit.textContent = originalText; btnSubmit.disabled = false;
+    console.warn("Tabella gioco fallback:", error);
+    return Object.keys(CLASSI_FALLBACK).sort();
   }
+}
+
+function calcolaTolleranze(classe, diametro) {
+  if (!classe) return null;
+  const d = Number(diametro);
+  const righe = tabellaGioco.filter(r => r.classe === classe);
+  if (righe.length && !Number.isNaN(d)) {
+    const match = righe.find(r => {
+      const minOk = r.dMin == null || d >= r.dMin;
+      const maxOk = r.dMax == null || d <= r.dMax;
+      return minOk && maxOk;
+    });
+    if (match) return { min: match.giocoMin, max: match.giocoMax };
+  }
+  if (righe.length) return { min: righe[0].giocoMin, max: righe[0].giocoMax };
+  return CLASSI_FALLBACK[classe] || null;
 }
 
 function aggiornaGiocoIntegrato() {
-  const classe = document.getElementById("classeGioco").value;
+  const classe = $("classeGioco").value;
   const diametro = leggiNumero("irDiametro");
-  const tolleranza = calcolaTolleranze(classe, diametro);
-  if (tolleranza) {
-    document.getElementById("giocoMin").value = tolleranza.min ?? "";
-    document.getElementById("giocoMax").value = tolleranza.max ?? "";
-  } else {
-    document.getElementById("giocoMin").value = ""; document.getElementById("giocoMax").value = "";
+  const result = calcolaTolleranze(classe, diametro);
+  $("giocoMin").value = result?.min ?? "";
+  $("giocoMax").value = result?.max ?? "";
+}
+
+function exportToCSV() {
+  if (!lavorazioni.length) return alert("Nessuna lavorazione salvata.");
+  const headers = ["codice", "irTipo", "irDiametro", "orTipo", "diametroSfera", "numeroSfere", "gabbiaTipo", "grassoTipo", "schermoTipo", "pesoMin", "pesoMax", "classeGioco", "giocoMin", "giocoMax", "disegnoUrl"];
+  const rows = lavorazioni.map(lav => headers.map(h => escapeCSV(lav[h] ?? "")).join(";"));
+  const csv = headers.join(";") + "\n" + rows.join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "lavorazioni_cuscinetti.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getByHeader(row, header, aliases) {
+  for (const a of aliases) {
+    const i = header.indexOf(a);
+    if (i >= 0) return row[i] || "";
   }
+  return "";
+}
+
+function parseImportCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return [];
+  const sep = detectSeparator(lines[0]);
+  const headerRaw = parseCsvLine(lines[0], sep).map(h => h.trim());
+  const header = headerRaw.map(h => h.replace(/^\uFEFF/, ""));
+  const hasHeader = header.some(h => ["codice", "code", "irTipo", "irType", "classeGioco", "clearanceClass"].includes(h));
+  const start = hasHeader ? 1 : 0;
+  const records = [];
+
+  for (let i = start; i < lines.length; i++) {
+    const row = parseCsvLine(lines[i], sep);
+    let rec;
+    if (hasHeader) {
+      rec = {
+        id: generaId(),
+        codice: getByHeader(row, header, ["codice", "code", "Codice", "Codice lavorazione"]),
+        irTipo: getByHeader(row, header, ["irTipo", "irType", "IR", "IR - Tipo"]),
+        irDiametro: toNumberOrNull(getByHeader(row, header, ["irDiametro", "irBore", "Diametro foro IR", "d_min", "diametro"])),
+        orTipo: getByHeader(row, header, ["orTipo", "orType", "OR", "OR - Tipo"]),
+        diametroSfera: toNumberOrNull(getByHeader(row, header, ["diametroSfera", "ballDiameter", "Sfera - Diametro (mm)"])),
+        numeroSfere: toNumberOrNull(getByHeader(row, header, ["numeroSfere", "ballCount", "Sfera - Numero sfere (n)"])),
+        gabbiaTipo: getByHeader(row, header, ["gabbiaTipo", "cageType", "Gabbia - Tipo"]),
+        grassoTipo: getByHeader(row, header, ["grassoTipo", "greaseType", "Grasso - Tipo"]),
+        schermoTipo: getByHeader(row, header, ["schermoTipo", "sealType", "Schermo / Tenuta"]),
+        pesoMin: toNumberOrNull(getByHeader(row, header, ["pesoMin", "weightMin"])),
+        pesoMax: toNumberOrNull(getByHeader(row, header, ["pesoMax", "weightMax"])),
+        classeGioco: getByHeader(row, header, ["classeGioco", "clearanceClass", "classe"]),
+        giocoMin: toNumberOrNull(getByHeader(row, header, ["giocoMin", "clearanceMin", "gioco_min"])),
+        giocoMax: toNumberOrNull(getByHeader(row, header, ["giocoMax", "clearanceMax", "gioco_max"])),
+        disegnoUrl: normalizzaUrlImmagine(getByHeader(row, header, ["disegnoUrl", "imageUrl", "URL immagine"])),
+        disegnoData: ""
+      };
+    } else {
+      rec = {
+        id: generaId(),
+        codice: row[0] || "",
+        irTipo: row[1] || "",
+        irDiametro: toNumberOrNull(row[2]),
+        orTipo: row[3] || "",
+        diametroSfera: toNumberOrNull(row[4]),
+        numeroSfere: toNumberOrNull(row[5]),
+        gabbiaTipo: row[6] || "",
+        grassoTipo: row[7] || "",
+        schermoTipo: row[8] || "",
+        pesoMin: toNumberOrNull(row[9]),
+        pesoMax: toNumberOrNull(row[10]),
+        classeGioco: row[11] || "",
+        giocoMin: toNumberOrNull(row[12]),
+        giocoMax: toNumberOrNull(row[13]),
+        disegnoUrl: normalizzaUrlImmagine(row[14] || ""),
+        disegnoData: ""
+      };
+    }
+    if (rec.codice) records.push(rec);
+  }
+  return records;
+}
+
+function importFromCSV(file) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const nuovi = parseImportCSV(ev.target.result);
+      if (!nuovi.length) return alert("Nessun dato valido trovato nel CSV.");
+      if (!confirm(`Importare ${nuovi.length} ricette?`)) return;
+      lavorazioni = lavorazioni.concat(nuovi);
+      salvaSuStorage();
+      renderLista();
+      alert("Importazione completata.");
+    } catch (error) {
+      console.error(error);
+      alert("Errore importazione CSV: " + error.message);
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function apriSchedaTecnica() {
+  const lav = lavorazioni.find(l => l.id === idCorrente);
+  if (!lav) return alert("Seleziona prima una lavorazione.");
+  $("scheda-codice").textContent = lav.codice || "Scheda tecnica";
+  $("scheda-sub").textContent = `IR: ${lav.irTipo || "-"} · OR: ${lav.orTipo || "-"}`;
+  $("scheda-ir").textContent = lav.irTipo || "-";
+  $("scheda-or").textContent = lav.orTipo || "-";
+  $("scheda-ir-diametro").textContent = lav.irDiametro != null ? `${lav.irDiametro} mm` : "-";
+  $("scheda-sfere").textContent = `Ø ${lav.diametroSfera ?? "-"} mm · n=${lav.numeroSfere ?? "-"}`;
+  $("scheda-gabbia").textContent = lav.gabbiaTipo || "-";
+  $("scheda-grasso").textContent = lav.grassoTipo || "-";
+  $("scheda-schermo").textContent = lav.schermoTipo || "-";
+  $("scheda-peso").textContent = lav.pesoMin != null || lav.pesoMax != null ? `${lav.pesoMin ?? "-"} – ${lav.pesoMax ?? "-"} g` : "-";
+  $("scheda-gioco").textContent = lav.classeGioco || lav.giocoMin != null || lav.giocoMax != null ? `${lav.classeGioco || ""} ${lav.giocoMin ?? "-"} – ${lav.giocoMax ?? "-"} µm` : "-";
+
+  const img = $("scheda-drawing-image");
+  const ph = $("scheda-drawing-placeholder");
+  const src = lav.disegnoData || normalizzaUrlImmagine(lav.disegnoUrl || "");
+  img.style.display = "none";
+  ph.style.display = "block";
+  if (!src) {
+    img.removeAttribute("src");
+    ph.textContent = "Nessun disegno caricato";
+  } else {
+    ph.textContent = "Caricamento disegno...";
+    img.onload = () => { ph.style.display = "none"; img.style.display = "block"; };
+    img.onerror = () => { ph.textContent = "Immagine non disponibile: controlla condivisione Drive."; img.style.display = "none"; };
+    img.src = src;
+  }
+  $("scheda-modal").classList.remove("is-hidden");
+}
+
+function chiudiSchedaTecnica() {
+  const modal = $("scheda-modal");
+  if (modal) modal.classList.add("is-hidden");
+}
+
+function stampaScheda() {
+  const content = document.querySelector("#scheda-modal .modal-content");
+  if (!content) return;
+  const win = window.open("", "_blank");
+  win.document.write(`<!DOCTYPE html><html><head><title>${$("scheda-codice").textContent}</title><link rel="stylesheet" href="./css/styles.css"></head><body>${content.outerHTML}</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 350);
+}
+
+function caricaFileDisegno(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    immagineCorrenteData = ev.target.result;
+    aggiornaDisegnoPreview(immagineCorrenteData);
+  };
+  reader.readAsDataURL(file);
+}
+
+function aggiornaSelectClassi(classi) {
+  const select = $("classeGioco");
+  const filtro = $("filtro-classe");
+  if (!select) return;
+  select.innerHTML = '<option value="">Seleziona...</option>';
+  if (filtro) filtro.innerHTML = '<option value="">Tutte le classi</option>';
+  classi.forEach(cls => {
+    const opt = document.createElement("option");
+    opt.value = cls;
+    opt.textContent = cls;
+    select.appendChild(opt);
+    if (filtro) {
+      const opt2 = document.createElement("option");
+      opt2.value = cls;
+      opt2.textContent = cls;
+      filtro.appendChild(opt2);
+    }
+  });
+}
+
+function disattivaKiosk() {
+  const overlay = $("kiosk-overlay");
+  if (overlay) overlay.classList.add("is-hidden");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("[SYS] Avvio Orchestratore...");
-  initKioskAuth();
+  disattivaKiosk();
+  const classi = await inizializzaTabellaGioco();
+  aggiornaSelectClassi(classi);
 
-  const classiDisponibili = await inizializzaTabellaGioco("tabella_gioco.csv");
-  const selectClasse = document.getElementById("classeGioco");
-  if (selectClasse && classiDisponibili.length > 0) {
-    selectClasse.innerHTML = '<option value="">Seleziona classe…</option>';
-    classiDisponibili.forEach(cls => {
-      const opt = document.createElement("option");
-      opt.value = cls; opt.textContent = cls; selectClasse.appendChild(opt);
-    });
-  }
+  lavorazioni = caricaDaStorage();
+  renderLista();
+  resetForm();
+  nascondiForm();
 
-  lavorazioni = await caricaDaCloud();
-  renderLista(); resetForm(); nascondiForm();
-
-  const btnCloseZoom = document.getElementById("btn-close-zoom");
-  if (btnCloseZoom) btnCloseZoom.addEventListener("click", chiudiZoomImmagine);
-
-  document.getElementById("form-lavorazione").addEventListener("submit", gestisciSubmit);
-  
-  const btnNuova = document.getElementById("btn-nuova");
-  if(btnNuova) {
-    btnNuova.addEventListener("click", () => {
-      resetForm(); mostraForm();
-      window.scrollTo({ top: document.getElementById("card-form").getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
-    });
-  }
-
-  document.getElementById("btn-reset").addEventListener("click", resetForm);
-  document.getElementById("btn-elimina").addEventListener("click", () => {
-    if (!idCorrente || !confirm("Eliminare questa lavorazione dal Cloud centralizzato?")) return;
-    lavorazioni = lavorazioni.filter((l) => l.id !== idCorrente);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
-    resetForm(); nascondiForm(); renderLista();
+  $("form-lavorazione").addEventListener("submit", gestisciSubmit);
+  $("btn-nuova").addEventListener("click", () => {
+    resetForm();
+    mostraForm();
+    const card = $("card-form");
+    if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
   });
+  $("btn-reset").addEventListener("click", resetForm);
+  $("btn-elimina").addEventListener("click", eliminaCorrente);
+  $("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
+  $("irDiametro").addEventListener("change", aggiornaGiocoIntegrato);
 
-  document.getElementById("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
-  document.getElementById("irDiametro").addEventListener("change", aggiornaGiocoIntegrato);
-
-  document.getElementById("disegnoUrl").addEventListener("change", (e) => {
+  $("disegnoUrl").addEventListener("input", (e) => {
+    // Non tocchiamo mentre l'utente scrive, ma aggiorniamo se è già link drive completo.
+    if (estraiGoogleDriveId(e.target.value)) aggiornaDisegnoPreview(normalizzaUrlImmagine(e.target.value));
+  });
+  $("disegnoUrl").addEventListener("change", (e) => {
     e.target.value = normalizzaUrlImmagine(e.target.value);
     if (!immagineCorrenteData) aggiornaDisegnoPreview(e.target.value);
   });
 
-  const fileHandler = (e) => {
+  $("btn-file-galleria").addEventListener("click", () => $("file-galleria").click());
+  $("file-galleria").addEventListener("change", (e) => caricaFileDisegno(e.target.files[0]));
+  $("btn-export-csv").addEventListener("click", exportToCSV);
+  $("btn-import").addEventListener("click", () => $("file-import").click());
+  $("file-import").addEventListener("change", (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => { immagineCorrenteData = ev.target.result; aggiornaDisegnoPreview(immagineCorrenteData); };
-      reader.readAsDataURL(file);
-    }
-  };
-  
-  document.getElementById("btn-file-galleria").addEventListener("click", () => document.getElementById("file-galleria").click());
-  document.getElementById("file-galleria").addEventListener("change", fileHandler);
-
-  if(document.getElementById("btn-analizza-ia")) document.getElementById("btn-analizza-ia").addEventListener("click", analizzaConIA);
-
-  document.getElementById("btn-export-csv").addEventListener("click", () => {
-    if (lavorazioni.length === 0) return alert("Nessuna lavorazione salvata.");
-    esportaLavorazioniInCSV(lavorazioni);
+    if (file) importFromCSV(file);
+    e.target.value = "";
   });
 
-  const fileImport = document.getElementById("file-import");
-  document.getElementById("btn-import").addEventListener("click", () => fileImport.click());
-  fileImport.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const nuovi = analizzaImportCSV(ev.target.result, generaId, normalizzaUrlImmagine);
-          lavorazioni = lavorazioni.concat(nuovi);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni)); renderLista(); alert("Importazione completata con successo.");
-        } catch(err) { alert("Errore importazione: " + err.message); }
-      };
-      reader.readAsText(file, "utf-8");
-    }
-    fileImport.value = "";
-  });
+  $("btn-scheda-tecnica").addEventListener("click", apriSchedaTecnica);
+  $("scheda-close").addEventListener("click", chiudiSchedaTecnica);
+  $("scheda-save-pdf").addEventListener("click", stampaScheda);
+  document.querySelector("#scheda-modal .modal-backdrop")?.addEventListener("click", chiudiSchedaTecnica);
+  $("btn-close-zoom")?.addEventListener("click", chiudiZoomImmagine);
 
-  document.getElementById("btn-scheda-tecnica").addEventListener("click", () => alert("Generazione scheda tecnica attiva."));
+  $("filtro-ricette")?.addEventListener("input", (e) => { filtroTesto = e.target.value; renderLista(); });
+  $("filtro-classe")?.addEventListener("change", (e) => { filtroClasse = e.target.value; renderLista(); });
 });
