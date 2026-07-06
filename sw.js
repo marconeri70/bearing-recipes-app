@@ -1,7 +1,7 @@
 // sw.js - PWA Ricette Lavorazione Cuscinetti
 // Cache network-first per evitare che il telefono resti bloccato su vecchie versioni.
 
-const CACHE_NAME = 'bearing-recipes-v9-gallery-camera';
+const CACHE_NAME = 'bearing-recipes-v10-ia-extract';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
