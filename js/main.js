@@ -340,7 +340,7 @@ function caricaLavorazioneInForm(id) {
   $("disegnoUrl").value = lav.disegnoUrl || "";
   // Non ricarichiamo vecchie foto base64: devono restare solo temporanee per IA/preview.
   immagineCorrenteData = "";
-  aggiornaDisegnoPreview(lav.disegnoUrl || "");
+  aggiornaDisegnoPreview(lav.disegnoUrl || lav.disegnoData || "");
   $("stato-modifica").textContent = "Modifica lavorazione esistente";
   if ($("gioco-avviso")) $("gioco-avviso").textContent = "Valori salvati: verifica la tabella SKF prima di modificarli.";
   $("btn-elimina").disabled = false;
@@ -369,9 +369,9 @@ function leggiDatiForm() {
     giocoMin: leggiNumero("giocoMin"),
     giocoMax: leggiNumero("giocoMax"),
     disegnoUrl: finalUrl,
-    // IMPORTANTE: non salvo mai la foto base64 nel localStorage.
-    // Resta disponibile solo temporaneamente per anteprima e pulsante IA.
-    disegnoData: ""
+    // Preservo eventuali vecchi disegni già archiviati: non si perdono modificando altri campi.
+    // Le NUOVE foto sono temporanee e vanno caricate online.
+    disegnoData: lavorazioni.find(l => l.id === idCorrente)?.disegnoData || ""
   };
 }
 
@@ -685,7 +685,7 @@ function apriSchedaTecnica() {
 
   const img = $("scheda-drawing-image");
   const ph = $("scheda-drawing-placeholder");
-  const src = lav.disegnoData || normalizzaUrlImmagine(lav.disegnoUrl || "");
+  const src = normalizzaUrlImmagine(lav.disegnoUrl || "") || lav.disegnoData || "";
   img.style.display = "none";
   ph.style.display = "block";
   if (!src) {
