@@ -1,6 +1,7 @@
 // js/main.js - Ricette Lavorazione Cuscinetti
 import { analizzaScheda } from "./api/vision.js";
-// Versione stabile localStorage + import CSV robusto + Google Drive thumbnail.
+import { configuraCloud, getCloudEndpoint, caricaFotoSuCloud } from "./api/cloud-client.js";
+// Versione stabile localStorage + import CSV robusto + Google Drive thumbnail + IA senza salvare base64.
 
 const STORAGE_KEY = "bearing_recipes_lavorazioni_v2";
 
@@ -26,6 +27,7 @@ let idCorrente = null;
 let immagineCorrenteData = "";
 let filtroTesto = "";
 let filtroClasse = "";
+let fotoUploadInCorso = false;
 
 function $(id) {
   return document.getElementById(id);
@@ -175,21 +177,38 @@ function aggiornaStatoSchedaButton() {
   if (btn) btn.disabled = !idCorrente;
 }
 
-function salvaSuStorage() {
+function alleggerisciRicette(lista) {
+  return (Array.isArray(lista) ? lista : []).map((lav) => ({
+    ...lav,
+    // Le foto scattate/caricate servono solo per anteprima e IA.
+    // Non vengono salvate nel localStorage perché riempiono subito la memoria del telefono.
+    disegnoData: "",
+    imageData: ""
+  }));
+}
+
+// Non modificare automaticamente gli archivi legacy: potrebbero contenere
+// gli unici originali delle foto tecniche. Un backup va fatto prima di qualsiasi pulizia.
+function salvaSuStorage(lista = lavorazioni) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(lavorazioni));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lista));
+    return true;
   } catch (error) {
-    console.error(error);
-    alert("Memoria locale piena. Usa link URL per le immagini, non foto interne grandi.");
+    console.error("Salvataggio non riuscito", error);
+    alert("Salvataggio NON riuscito: memoria locale piena. Esporta un backup JSON e libera spazio senza cancellare i dati del sito.");
+    return false;
   }
 }
 
 function caricaDaStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const data = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(data)) throw new Error("Archivio non valido");
+    return data; // lettura non distruttiva, anche di vecchi allegati
   } catch (error) {
-    console.error(error);
+    console.error("Errore lettura ricette", error);
+    alert("Impossibile leggere l'archivio locale. Non cancellare i dati del sito: salva prima un backup.");
     return [];
   }
 }
@@ -230,9 +249,8 @@ function renderLista() {
 
     riga.addEventListener("click", () => {
       caricaLavorazioneInForm(lav.id);
-      mostraForm();
-      const card = $("card-form");
-      if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
+      nascondiForm();
+      apriSchedaTecnica();
     });
 
     const left = document.createElement("div");
@@ -294,6 +312,7 @@ function resetForm() {
   if (fileGalleria) fileGalleria.value = "";
   if (fileCamera) fileCamera.value = "";
   $("stato-modifica").textContent = "Nuova lavorazione";
+  if ($("gioco-avviso")) $("gioco-avviso").textContent = "Inserisci diametro IR e classe: niente valori medi o presunti.";
   $("btn-elimina").disabled = true;
   aggiornaDisegnoPreview("");
   aggiornaStatoSchedaButton();
@@ -319,9 +338,11 @@ function caricaLavorazioneInForm(id) {
   $("giocoMin").value = lav.giocoMin ?? "";
   $("giocoMax").value = lav.giocoMax ?? "";
   $("disegnoUrl").value = lav.disegnoUrl || "";
-  immagineCorrenteData = lav.disegnoData || "";
-  aggiornaDisegnoPreview(immagineCorrenteData || lav.disegnoUrl || "");
+  // Non ricarichiamo vecchie foto base64: devono restare solo temporanee per IA/preview.
+  immagineCorrenteData = "";
+  aggiornaDisegnoPreview(lav.disegnoUrl || "");
   $("stato-modifica").textContent = "Modifica lavorazione esistente";
+  if ($("gioco-avviso")) $("gioco-avviso").textContent = "Valori salvati: verifica la tabella SKF prima di modificarli.";
   $("btn-elimina").disabled = false;
   aggiornaStatoSchedaButton();
   renderLista();
@@ -348,8 +369,9 @@ function leggiDatiForm() {
     giocoMin: leggiNumero("giocoMin"),
     giocoMax: leggiNumero("giocoMax"),
     disegnoUrl: finalUrl,
-    // Salvo data solo se immagine caricata da file. Consiglio: usare URL per molte ricette.
-    disegnoData: immagineCorrenteData || ""
+    // IMPORTANTE: non salvo mai la foto base64 nel localStorage.
+    // Resta disponibile solo temporaneamente per anteprima e pulsante IA.
+    disegnoData: ""
   };
 }
 
@@ -357,11 +379,25 @@ function gestisciSubmit(event) {
   event.preventDefault();
   const lav = leggiDatiForm();
   if (!lav.codice) return alert("Inserisci il codice lavorazione.");
-  const idx = lavorazioni.findIndex(l => l.id === lav.id);
-  if (idx >= 0) lavorazioni[idx] = lav;
-  else lavorazioni.push(lav);
+  if (fotoUploadInCorso) return alert("Caricamento foto online ancora in corso. Attendi l'esito prima di salvare.");
+  if (immagineCorrenteData && !lav.disegnoUrl && !confirm("La foto è solo temporanea e NON apparirà nella scheda dopo il salvataggio. Vuoi salvare soltanto i dati tecnici?")) return;
+  const duplicato = lavorazioni.find(l =>
+    String(l.codice || "").trim().toLowerCase() === lav.codice.toLowerCase() && l.id !== lav.id
+  );
+  if (duplicato) return alert(`Il codice ${lav.codice} è già presente: apri la ricetta esistente o usa un codice diverso.`);
+  if (lav.pesoMin != null && lav.pesoMax != null && lav.pesoMin > lav.pesoMax) {
+    return alert("Peso minimo superiore al massimo: controlla i dati.");
+  }
+  if (lav.giocoMin != null && lav.giocoMax != null && lav.giocoMin > lav.giocoMax) {
+    return alert("Gioco radiale minimo superiore al massimo: controlla i dati.");
+  }
+  const next = [...lavorazioni];
+  const idx = next.findIndex(l => l.id === lav.id);
+  if (idx >= 0) next[idx] = lav;
+  else next.push(lav);
+  if (!salvaSuStorage(next)) return;
+  lavorazioni = next;
   idCorrente = lav.id;
-  salvaSuStorage();
   renderLista();
   nascondiForm();
   alert("Lavorazione salvata.");
@@ -370,9 +406,10 @@ function gestisciSubmit(event) {
 function eliminaCorrente() {
   if (!idCorrente) return alert("Nessuna lavorazione selezionata.");
   const lav = lavorazioni.find(l => l.id === idCorrente);
-  if (!confirm(`Eliminare “${lav?.codice || idCorrente}”?`)) return;
-  lavorazioni = lavorazioni.filter(l => l.id !== idCorrente);
-  salvaSuStorage();
+  if (!confirm(`Eliminare “${lav?.codice || idCorrente}”? È consigliato un backup prima di eliminare.`)) return;
+  const next = lavorazioni.filter(l => l.id !== idCorrente);
+  if (!salvaSuStorage(next)) return;
+  lavorazioni = next;
   resetForm();
   nascondiForm();
 }
@@ -404,28 +441,43 @@ async function inizializzaTabellaGioco() {
   }
 }
 
+// I valori sono specifiche dimensionali, NON medie o valori generici.
+// Intervallo SKF: foro > d_min e <= d_max. Se più righe discordano, NON calcolare.
 function calcolaTolleranze(classe, diametro) {
-  if (!classe) return null;
-  const d = Number(diametro);
-  const righe = tabellaGioco.filter(r => r.classe === classe);
-  if (righe.length && !Number.isNaN(d)) {
-    const match = righe.find(r => {
-      const minOk = r.dMin == null || d >= r.dMin;
-      const maxOk = r.dMax == null || d <= r.dMax;
-      return minOk && maxOk;
-    });
-    if (match) return { min: match.giocoMin, max: match.giocoMax };
+  if (!classe) return { stato: "manca-classe" };
+  if (diametro === null || diametro === undefined || diametro === "" || !Number.isFinite(Number(diametro)) || Number(diametro) <= 0) {
+    return { stato: "manca-diametro" };
   }
-  if (righe.length) return { min: righe[0].giocoMin, max: righe[0].giocoMax };
-  return CLASSI_FALLBACK[classe] || null;
+  const d = Number(diametro);
+  const righe = tabellaGioco.filter(r =>
+    r.classe === classe &&
+    Number.isFinite(r.dMin) && Number.isFinite(r.dMax) &&
+    Number.isFinite(r.giocoMin) && Number.isFinite(r.giocoMax) &&
+    r.dMax >= r.dMin &&
+    (r.dMax === r.dMin ? d === r.dMax : d > r.dMin && d <= r.dMax)
+  );
+  if (!righe.length) return { stato: "non-disponibile" };
+  const coppie = new Set(righe.map(r => `${r.giocoMin}|${r.giocoMax}`));
+  if (coppie.size !== 1) return { stato: "ambiguo", alternative: righe.map(r => `${r.giocoMin}–${r.giocoMax} µm`) };
+  return { stato: "ok", min: righe[0].giocoMin, max: righe[0].giocoMax };
 }
 
 function aggiornaGiocoIntegrato() {
-  const classe = $("classeGioco").value;
-  const diametro = leggiNumero("irDiametro");
-  const result = calcolaTolleranze(classe, diametro);
-  $("giocoMin").value = result?.min ?? "";
-  $("giocoMax").value = result?.max ?? "";
+  const risultato = calcolaTolleranze($("classeGioco").value, leggiNumero("irDiametro"));
+  const nota = $("gioco-avviso");
+  $("giocoMin").value = risultato.stato === "ok" ? risultato.min : "";
+  $("giocoMax").value = risultato.stato === "ok" ? risultato.max : "";
+  const messaggi = {
+    "manca-classe": "Seleziona la classe per calcolare il gioco.",
+    "manca-diametro": "Inserisci il diametro foro IR per usare la tabella SKF.",
+    "non-disponibile": "Nessun limite verificato per questo diametro e classe: inserisci solo dati controllati su disegno.",
+    "ambiguo": "ATTENZIONE: tabella con valori discordanti per questa classe e questo diametro. Verifica il documento SKF originale.",
+    "ok": "Limiti letti dalla tabella caricata: verifica sempre documento, versione e carico di misura."
+  };
+  if (nota) {
+    nota.textContent = messaggi[risultato.stato];
+    nota.dataset.stato = risultato.stato;
+  }
 }
 
 function exportToCSV() {
@@ -433,7 +485,7 @@ function exportToCSV() {
   const headers = ["codice", "irTipo", "irDiametro", "orTipo", "diametroSfera", "numeroSfere", "gabbiaTipo", "grassoTipo", "schermoTipo", "pesoMin", "pesoMax", "classeGioco", "giocoMin", "giocoMax", "disegnoUrl"];
   const rows = lavorazioni.map(lav => headers.map(h => escapeCSV(lav[h] ?? "")).join(";"));
   const csv = headers.join(";") + "\n" + rows.join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -511,23 +563,109 @@ function parseImportCSV(text) {
   return records;
 }
 
+function aggiungiRicetteSenzaDuplicati(nuovi, origine = "file") {
+  const next = [...lavorazioni];
+  const codes = new Set(next.map(r => String(r.codice || "").trim().toLowerCase()));
+  let aggiunte = 0, saltate = 0;
+  for (const record of nuovi) {
+    const code = String(record.codice || "").trim().toLowerCase();
+    if (!code || codes.has(code)) { saltate++; continue; }
+    next.push({ ...record, id: generaId() });
+    codes.add(code);
+    aggiunte++;
+  }
+  if (!aggiunte) return alert(`Nessuna nuova ricetta. ${saltate} codici già presenti o non validi.`);
+  if (!salvaSuStorage(next)) return;
+  lavorazioni = next;
+  renderLista();
+  alert(`Importazione ${origine}: ${aggiunte} ricette aggiunte, ${saltate} duplicate/non valide ignorate.`);
+}
+
 function importFromCSV(file) {
   const reader = new FileReader();
   reader.onload = (ev) => {
     try {
-      const nuovi = parseImportCSV(ev.target.result);
-      if (!nuovi.length) return alert("Nessun dato valido trovato nel CSV.");
-      if (!confirm(`Importare ${nuovi.length} ricette?`)) return;
-      lavorazioni = lavorazioni.concat(nuovi);
-      salvaSuStorage();
-      renderLista();
-      alert("Importazione completata.");
+      const text = String(ev.target.result || "");
+      const first = parseCsvLine(text.split(/\r?\n/)[0] || "", detectSeparator(text.split(/\r?\n/)[0] || ""));
+      if (first.includes("d_min") && first.includes("gioco_min")) {
+        return alert("Questo è il CSV delle classi di gioco, non quello delle ricette. Aggiorna tabella_gioco.csv sul repository.");
+      }
+      const nuovi = parseImportCSV(text);
+      if (!nuovi.length) return alert("Nessuna ricetta valida trovata nel CSV.");
+      if (!confirm(`Importare fino a ${nuovi.length} ricette? Le ricette già esistenti non verranno sovrascritte.`)) return;
+      aggiungiRicetteSenzaDuplicati(nuovi, "CSV");
     } catch (error) {
       console.error(error);
       alert("Errore importazione CSV: " + error.message);
     }
   };
   reader.readAsText(file, "utf-8");
+}
+
+function scaricaBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function esportaBackupJSON() {
+  const backup = {
+    formato: "bearing-recipes-backup",
+    versione: 6,
+    creatoIl: new Date().toISOString(),
+    ricette: lavorazioni // include anche eventuali vecchie foto interne salvate
+  };
+  scaricaBlob(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }), `ricette-backup-${new Date().toISOString().slice(0,10)}.json`);
+}
+
+async function importaBackupJSON(file) {
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const records = Array.isArray(parsed) ? parsed : parsed?.ricette;
+    if (!Array.isArray(records) || !records.every(r => r && typeof r === "object")) {
+      throw new Error("Formato backup non riconosciuto");
+    }
+    const validi = records.filter(r => typeof r.codice === "string" && r.codice.trim().length);
+    if (!confirm(`Aggiungere fino a ${validi.length} ricette dal backup? I codici già presenti saranno mantenuti.`)) return;
+    aggiungiRicetteSenzaDuplicati(validi, "JSON");
+  } catch (error) {
+    alert("Backup non valido: " + error.message);
+  }
+}
+
+function recuperaArchivioPrecedente() {
+  const chiavi = Object.keys(localStorage).filter(k => k.startsWith("bearing_recipes") && k !== STORAGE_KEY);
+  const recuperabili = [];
+  for (const key of chiavi) {
+    try {
+      const d = JSON.parse(localStorage.getItem(key));
+      if (Array.isArray(d)) {
+        d.forEach(r => {
+          if (r && typeof (r.codice || r.code) === "string") {
+            recuperabili.push({
+              ...r, codice: r.codice || r.code,
+              irTipo: r.irTipo ?? r.irType,
+              orTipo: r.orTipo ?? r.orType,
+              classeGioco: r.classeGioco ?? r.clearanceClass,
+              giocoMin: r.giocoMin ?? r.clearanceMin,
+              giocoMax: r.giocoMax ?? r.clearanceMax,
+              disegnoUrl: r.disegnoUrl ?? r.imageUrl ?? "",
+              disegnoData: r.disegnoData || r.imageData || ""
+            });
+          }
+        });
+      }
+    } catch(e) { console.warn("Archivio precedente illeggibile",key,e); }
+  }
+  if (!recuperabili.length) return alert("Non sono stati trovati archivi precedenti sul dispositivo.");
+  if (!confirm(`Trovate ${recuperabili.length} ricette in vecchi archivi. Recuperare le mancanti senza cancellare gli originali?`)) return;
+  aggiungiRicetteSenzaDuplicati(recuperabili, "archivi precedenti");
 }
 
 function apriSchedaTecnica() {
@@ -568,13 +706,8 @@ function chiudiSchedaTecnica() {
 }
 
 function stampaScheda() {
-  const content = document.querySelector("#scheda-modal .modal-content");
-  if (!content) return;
-  const win = window.open("", "_blank");
-  win.document.write(`<!DOCTYPE html><html><head><title>${$("scheda-codice").textContent}</title><link rel="stylesheet" href="./css/styles.css"></head><body>${content.outerHTML}</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 350);
+  if ($("scheda-modal")?.classList.contains("is-hidden")) return;
+  window.print(); // Su Android scegliere Stampa > Salva come PDF
 }
 
 function impostaCampoSePresente(id, valore) {
@@ -606,6 +739,7 @@ function applicaDatiEstratti(dati) {
   };
 
   Object.entries(mappa).forEach(([chiave, id]) => {
+    if (id === "classeGioco" && dati[chiave] && !Array.from($(id).options).some(opt => opt.value === dati[chiave])) return;
     if (impostaCampoSePresente(id, dati[chiave])) compilati++;
   });
 
@@ -631,6 +765,7 @@ async function analizzaSchedaConIA() {
 
   try {
     const dati = await analizzaScheda(immagineCorrenteData);
+    if (!confirm("L'IA ha analizzato il disegno. Sostituire i campi con i valori estratti? Controlla sempre le specifiche SKF.")) return;
     const compilati = applicaDatiEstratti(dati);
     if (compilati > 0) {
       alert(`Estrazione completata: ${compilati} campi compilati. Controlla sempre i valori prima di salvare.`);
@@ -648,14 +783,35 @@ async function analizzaSchedaConIA() {
   }
 }
 
-function caricaFileDisegno(file) {
+async function caricaFileDisegno(file) {
   if (!file) return;
+  if (fotoUploadInCorso) return alert("Attendi la fine del caricamento precedente.");
+  if (!file.type.startsWith("image/")) return alert("Seleziona un'immagine JPG, PNG o WebP.");
+  if (file.size > 8 * 1024 * 1024) return alert("Foto troppo grande: massimo 8 MB. Riduci la risoluzione.");
   const reader = new FileReader();
   reader.onload = (ev) => {
     immagineCorrenteData = ev.target.result;
     aggiornaDisegnoPreview(immagineCorrenteData);
   };
   reader.readAsDataURL(file);
+  $("disegnoUrl").value = ""; // evita di associare per errore una nuova foto al vecchio URL
+  const status = $("cloud-status");
+  if (!getCloudEndpoint()) {
+    if (status) status.textContent = "Foto temporanea per IA. Per salvarla online configura l'archivio cloud; altrimenti incolla un URL nel campo disegno.";
+    return;
+  }
+  if (status) status.textContent = "Caricamento foto nell'archivio online...";
+  fotoUploadInCorso = true;
+  try {
+    const url = await caricaFotoSuCloud(file);
+    $("disegnoUrl").value = url;
+    if (status) status.textContent = "Foto caricata online. Il link è stato inserito automaticamente; ora puoi salvare la ricetta.";
+  } catch (error) {
+    console.error(error);
+    if (status) status.textContent = "Foto NON caricata online: " + error.message + ". È ancora disponibile temporaneamente per l'estrazione.";
+  } finally {
+    fotoUploadInCorso = false;
+  }
 }
 
 function aggiornaSelectClassi(classi) {
@@ -685,15 +841,43 @@ function disattivaKiosk() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   disattivaKiosk();
-  const classi = await inizializzaTabellaGioco();
-  aggiornaSelectClassi(classi);
-
   lavorazioni = caricaDaStorage();
+  const classi = await inizializzaTabellaGioco();
+  aggiornaSelectClassi(Array.from(new Set([...classi, ...lavorazioni.map(l => l.classeGioco).filter(Boolean)])).sort());
   renderLista();
   resetForm();
   nascondiForm();
 
   $("form-lavorazione").addEventListener("submit", gestisciSubmit);
+  $("btn-backup-json")?.addEventListener("click", esportaBackupJSON);
+  $("btn-import-json")?.addEventListener("click", () => $("file-import-json")?.click());
+  $("file-import-json")?.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importaBackupJSON(file);
+    e.target.value = "";
+  });
+  $("btn-recupera-archivi")?.addEventListener("click", recuperaArchivioPrecedente);
+  $("btn-cloud-settings")?.addEventListener("click", () => {
+    configuraCloud();
+    if ($("cloud-status")) $("cloud-status").textContent = getCloudEndpoint() ? "Archivio cloud configurato: le prossime foto verranno caricate automaticamente." : "Archivio cloud non configurato: le foto rimarranno temporanee.";
+  });
+  $("cloud-status") && ($("cloud-status").textContent = getCloudEndpoint() ? "Cloud collegato: foto caricate automaticamente quando selezionate." : "Cloud non configurato: foto temporanee, non salvate con la ricetta.");
+  $("scheda-edit")?.addEventListener("click", () => {
+    chiudiSchedaTecnica();
+    mostraForm();
+    $("card-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("scheda-duplica")?.addEventListener("click", () => {
+    if (!idCorrente) return;
+    const codice = $("codice").value;
+    chiudiSchedaTecnica();
+    idCorrente = null;
+    $("codice").value = codice + "-COPIA";
+    $("stato-modifica").textContent = "Nuova ricetta da duplicazione";
+    $("btn-elimina").disabled = true;
+    mostraForm();
+    $("card-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   $("btn-nuova").addEventListener("click", () => {
     resetForm();
     mostraForm();
@@ -704,6 +888,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("btn-elimina").addEventListener("click", eliminaCorrente);
   $("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
   $("irDiametro").addEventListener("change", aggiornaGiocoIntegrato);
+  $("irDiametro").addEventListener("input", aggiornaGiocoIntegrato);
 
   $("disegnoUrl").addEventListener("input", (e) => {
     // Non tocchiamo mentre l'utente scrive, ma aggiorniamo se è già link drive completo.
