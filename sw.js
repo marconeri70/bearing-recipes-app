@@ -1,7 +1,7 @@
 // sw.js - PWA Ricette Lavorazione Cuscinetti
 // Cache network-first per evitare che il telefono resti bloccato su vecchie versioni.
 
-const CACHE_NAME = 'bearing-recipes-v12-backup-quality-cloud';
+const CACHE_NAME = 'bearing-recipes-v13-skf-normal-series';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const ASSETS_TO_CACHE = [
   './js/api/auth.js',
   './manifest.json',
   './tabella_gioco.csv',
+  './tabella_gioco_normale_skf.csv',
   './icon-192.png',
   './icon-512.png'
 ];
