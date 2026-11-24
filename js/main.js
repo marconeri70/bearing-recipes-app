@@ -477,6 +477,42 @@ async function inizializzaTabellaNormaleSKF() {
   }
 }
 
+// Classi divise SKF: C2L/C2H/CNL/CNH/C3L/C3H, tabella stampata il 04/01/2021.
+// Mantenerle distinte dai valori normali; la stessa classe può variare con la serie BCG.
+async function inizializzaTabellaDivisaSKF() {
+  try {
+    const response = await fetch("./tabella_gioco_diviso_skf.csv", { cache: "no-store" });
+    if (!response.ok) throw new Error("tabella_gioco_diviso_skf.csv mancante");
+    const lines = (await response.text()).split(/\r?\n/).filter(l => l.trim());
+    const sep = detectSeparator(lines[0] || "");
+    const header = parseCsvLine(lines[0] || "", sep).map(v => v.replace(/^\uFEFF/, ""));
+    const idx = key => header.indexOf(key);
+    if (["serie", "d_min", "d_max", "classe", "gioco_min", "gioco_max"].some(k => idx(k) < 0)) {
+      throw new Error("Intestazioni CSV classi divise non riconosciute");
+    }
+    const divise = lines.slice(1).map(line => {
+      const row = parseCsvLine(line, sep);
+      return {
+        serie: (row[idx("serie")] || "").trim(),
+        dMin: toNumberOrNull(row[idx("d_min")]),
+        dMax: toNumberOrNull(row[idx("d_max")]),
+        classe: (row[idx("classe")] || "").trim(),
+        giocoMin: toNumberOrNull(row[idx("gioco_min")]),
+        giocoMax: toNumberOrNull(row[idx("gioco_max")]),
+        documento: "SKF_DIVISO_2021"
+      };
+    }).filter(r => ["BCG02", "BCG04", "BCG06"].includes(r.serie)
+      && ["C2L", "C2H", "CNL", "CNH", "C3L", "C3H"].includes(r.classe)
+      && Number.isFinite(r.dMin) && Number.isFinite(r.dMax)
+      && Number.isFinite(r.giocoMin) && Number.isFinite(r.giocoMax));
+    tabellaGiocoNormaleSKF.push(...divise);
+    return divise.length;
+  } catch (error) {
+    console.warn("Tabella SKF classi divise non disponibile:", error);
+    return 0;
+  }
+}
+
 // Specifiche dimensionali: niente medie o fallback automatici.
 // Intervallo SKF: foro > d_min e <= d_max; se discordano, non calcolare.
 function calcolaTolleranze(classe, diametro, serie = "storica") {
@@ -513,7 +549,9 @@ function aggiornaGiocoIntegrato() {
     "ambiguo": "ATTENZIONE: tabella con valori discordanti per questa classe e questo diametro. Verifica il documento SKF originale.",
     "ok": serie === "storica"
       ? "Limiti letti dalla tabella precedente: verifica documento e condizioni di misura."
-      : `Limiti SKF normale (${serie}) dalla foto del documento stampato il 20/07/2020. Verifica il disegno e il riferimento di misura.`
+      : (["C2L", "C2H", "CNL", "CNH", "C3L", "C3H"].includes($("classeGioco").value)
+          ? `Limiti SKF classi DIVISE (${serie}), documento stampato il 04/01/2021. Verifica specifica approvata e carico di misura.`
+          : `Limiti SKF NORMALE (${serie}), documento stampato il 20/07/2020. Verifica specifica approvata e carico di misura.`)
   };
   if (nota) {
     nota.textContent = messaggi[risultato.stato];
@@ -889,7 +927,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   lavorazioni = caricaDaStorage();
   const classi = await inizializzaTabellaGioco();
   await inizializzaTabellaNormaleSKF();
-  aggiornaSelectClassi(Array.from(new Set([...classi, ...lavorazioni.map(l => l.classeGioco).filter(Boolean)])).sort());
+  await inizializzaTabellaDivisaSKF();
+  aggiornaSelectClassi(Array.from(new Set([...classi, ...tabellaGiocoNormaleSKF.map(r => r.classe), ...lavorazioni.map(l => l.classeGioco).filter(Boolean)])).sort());
   renderLista();
   resetForm();
   nascondiForm();
