@@ -22,6 +22,7 @@ const CLASSI_FALLBACK = {
 };
 
 let tabellaGioco = [];
+let tabellaGiocoNormaleSKF = [];
 let lavorazioni = [];
 let idCorrente = null;
 let immagineCorrenteData = "";
@@ -312,7 +313,8 @@ function resetForm() {
   if (fileGalleria) fileGalleria.value = "";
   if (fileCamera) fileCamera.value = "";
   $("stato-modifica").textContent = "Nuova lavorazione";
-  if ($("gioco-avviso")) $("gioco-avviso").textContent = "Inserisci diametro IR e classe: niente valori medi o presunti.";
+  if ($("serieGioco")) $("serieGioco").value = "storica";
+  if ($("gioco-avviso")) $("gioco-avviso").textContent = "Seleziona riferimento, diametro e classe: non vengono calcolati valori approssimati.";
   $("btn-elimina").disabled = true;
   aggiornaDisegnoPreview("");
   aggiornaStatoSchedaButton();
@@ -334,6 +336,7 @@ function caricaLavorazioneInForm(id) {
   $("schermoTipo").value = lav.schermoTipo || "";
   $("pesoMin").value = lav.pesoMin ?? "";
   $("pesoMax").value = lav.pesoMax ?? "";
+  $("serieGioco").value = lav.serieGioco || "storica";
   $("classeGioco").value = lav.classeGioco || "";
   $("giocoMin").value = lav.giocoMin ?? "";
   $("giocoMax").value = lav.giocoMax ?? "";
@@ -366,6 +369,7 @@ function leggiDatiForm() {
     pesoMin: leggiNumero("pesoMin"),
     pesoMax: leggiNumero("pesoMax"),
     classeGioco: $("classeGioco").value,
+    serieGioco: $("serieGioco").value || "storica",
     giocoMin: leggiNumero("giocoMin"),
     giocoMax: leggiNumero("giocoMax"),
     disegnoUrl: finalUrl,
@@ -441,15 +445,49 @@ async function inizializzaTabellaGioco() {
   }
 }
 
-// I valori sono specifiche dimensionali, NON medie o valori generici.
-// Intervallo SKF: foro > d_min e <= d_max. Se più righe discordano, NON calcolare.
-function calcolaTolleranze(classe, diametro) {
+// Tabella da documento SKF fotografato: normale precisione, foro cilindrico, d <= 180.
+// I codici BCG02/BCG04/BCG06 sono serie differenti nello stesso documento.
+// Non si interpolano valori e non si confondono le serie, anche se condividono un intervallo di foro.
+async function inizializzaTabellaNormaleSKF() {
+  try {
+    const response = await fetch("./tabella_gioco_normale_skf.csv", { cache: "no-store" });
+    if (!response.ok) throw new Error("tabella_gioco_normale_skf.csv mancante");
+    const lines = (await response.text()).split(/\r?\n/).filter(l => l.trim());
+    const sep = detectSeparator(lines[0] || "");
+    const header = parseCsvLine(lines[0] || "", sep).map(v => v.replace(/^\uFEFF/, ""));
+    const idx = key => header.indexOf(key);
+    if (["serie", "d_min", "d_max", "classe", "gioco_min", "gioco_max"].some(k => idx(k) < 0)) {
+      throw new Error("Intestazioni del CSV SKF normale non riconosciute");
+    }
+    tabellaGiocoNormaleSKF = lines.slice(1).map(line => {
+      const row = parseCsvLine(line, sep);
+      return {
+        serie: (row[idx("serie")] || "").trim(),
+        dMin: toNumberOrNull(row[idx("d_min")]),
+        dMax: toNumberOrNull(row[idx("d_max")]),
+        classe: (row[idx("classe")] || "").trim(),
+        giocoMin: toNumberOrNull(row[idx("gioco_min")]),
+        giocoMax: toNumberOrNull(row[idx("gioco_max")])
+      };
+    }).filter(r => r.serie && r.classe && Number.isFinite(r.dMin) && Number.isFinite(r.dMax)
+      && Number.isFinite(r.giocoMin) && Number.isFinite(r.giocoMax));
+  } catch (error) {
+    tabellaGiocoNormaleSKF = [];
+    console.warn("Tabella SKF normale non disponibile:", error);
+  }
+}
+
+// Specifiche dimensionali: niente medie o fallback automatici.
+// Intervallo SKF: foro > d_min e <= d_max; se discordano, non calcolare.
+function calcolaTolleranze(classe, diametro, serie = "storica") {
   if (!classe) return { stato: "manca-classe" };
   if (diametro === null || diametro === undefined || diametro === "" || !Number.isFinite(Number(diametro)) || Number(diametro) <= 0) {
     return { stato: "manca-diametro" };
   }
   const d = Number(diametro);
-  const righe = tabellaGioco.filter(r =>
+  const tabella = serie === "storica" ? tabellaGioco : tabellaGiocoNormaleSKF;
+  const righe = tabella.filter(r =>
+    (serie === "storica" || r.serie === serie) &&
     r.classe === classe &&
     Number.isFinite(r.dMin) && Number.isFinite(r.dMax) &&
     Number.isFinite(r.giocoMin) && Number.isFinite(r.giocoMax) &&
@@ -463,7 +501,8 @@ function calcolaTolleranze(classe, diametro) {
 }
 
 function aggiornaGiocoIntegrato() {
-  const risultato = calcolaTolleranze($("classeGioco").value, leggiNumero("irDiametro"));
+  const serie = $("serieGioco")?.value || "storica";
+  const risultato = calcolaTolleranze($("classeGioco").value, leggiNumero("irDiametro"), serie);
   const nota = $("gioco-avviso");
   $("giocoMin").value = risultato.stato === "ok" ? risultato.min : "";
   $("giocoMax").value = risultato.stato === "ok" ? risultato.max : "";
@@ -472,7 +511,9 @@ function aggiornaGiocoIntegrato() {
     "manca-diametro": "Inserisci il diametro foro IR per usare la tabella SKF.",
     "non-disponibile": "Nessun limite verificato per questo diametro e classe: inserisci solo dati controllati su disegno.",
     "ambiguo": "ATTENZIONE: tabella con valori discordanti per questa classe e questo diametro. Verifica il documento SKF originale.",
-    "ok": "Limiti letti dalla tabella caricata: verifica sempre documento, versione e carico di misura."
+    "ok": serie === "storica"
+      ? "Limiti letti dalla tabella precedente: verifica documento e condizioni di misura."
+      : `Limiti SKF normale (${serie}) dalla foto del documento stampato il 20/07/2020. Verifica il disegno e il riferimento di misura.`
   };
   if (nota) {
     nota.textContent = messaggi[risultato.stato];
@@ -482,7 +523,7 @@ function aggiornaGiocoIntegrato() {
 
 function exportToCSV() {
   if (!lavorazioni.length) return alert("Nessuna lavorazione salvata.");
-  const headers = ["codice", "irTipo", "irDiametro", "orTipo", "diametroSfera", "numeroSfere", "gabbiaTipo", "grassoTipo", "schermoTipo", "pesoMin", "pesoMax", "classeGioco", "giocoMin", "giocoMax", "disegnoUrl"];
+  const headers = ["codice", "irTipo", "irDiametro", "orTipo", "diametroSfera", "numeroSfere", "gabbiaTipo", "grassoTipo", "schermoTipo", "pesoMin", "pesoMax", "classeGioco", "giocoMin", "giocoMax", "disegnoUrl", "serieGioco"];
   const rows = lavorazioni.map(lav => headers.map(h => escapeCSV(lav[h] ?? "")).join(";"));
   const csv = headers.join(";") + "\n" + rows.join("\n");
   const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
@@ -532,6 +573,7 @@ function parseImportCSV(text) {
         pesoMin: toNumberOrNull(getByHeader(row, header, ["pesoMin", "weightMin"])),
         pesoMax: toNumberOrNull(getByHeader(row, header, ["pesoMax", "weightMax"])),
         classeGioco: getByHeader(row, header, ["classeGioco", "clearanceClass", "classe"]),
+        serieGioco: getByHeader(row, header, ["serieGioco", "clearanceSeries"]) || "storica",
         giocoMin: toNumberOrNull(getByHeader(row, header, ["giocoMin", "clearanceMin", "gioco_min"])),
         giocoMax: toNumberOrNull(getByHeader(row, header, ["giocoMax", "clearanceMax", "gioco_max"])),
         disegnoUrl: normalizzaUrlImmagine(getByHeader(row, header, ["disegnoUrl", "imageUrl", "URL immagine"])),
@@ -552,6 +594,7 @@ function parseImportCSV(text) {
         pesoMin: toNumberOrNull(row[9]),
         pesoMax: toNumberOrNull(row[10]),
         classeGioco: row[11] || "",
+        serieGioco: row[15] || "storica",
         giocoMin: toNumberOrNull(row[12]),
         giocoMax: toNumberOrNull(row[13]),
         disegnoUrl: normalizzaUrlImmagine(row[14] || ""),
@@ -681,7 +724,9 @@ function apriSchedaTecnica() {
   $("scheda-grasso").textContent = lav.grassoTipo || "-";
   $("scheda-schermo").textContent = lav.schermoTipo || "-";
   $("scheda-peso").textContent = lav.pesoMin != null || lav.pesoMax != null ? `${lav.pesoMin ?? "-"} – ${lav.pesoMax ?? "-"} g` : "-";
-  $("scheda-gioco").textContent = lav.classeGioco || lav.giocoMin != null || lav.giocoMax != null ? `${lav.classeGioco || ""} ${lav.giocoMin ?? "-"} – ${lav.giocoMax ?? "-"} µm` : "-";
+  $("scheda-gioco").textContent = lav.classeGioco || lav.giocoMin != null || lav.giocoMax != null
+    ? `${lav.classeGioco || ""} ${lav.giocoMin ?? "-"} – ${lav.giocoMax ?? "-"} µm · ${lav.serieGioco && lav.serieGioco !== "storica" ? "SKF " + lav.serieGioco : "tabella precedente"}`
+    : "-";
 
   const img = $("scheda-drawing-image");
   const ph = $("scheda-drawing-placeholder");
@@ -843,6 +888,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   disattivaKiosk();
   lavorazioni = caricaDaStorage();
   const classi = await inizializzaTabellaGioco();
+  await inizializzaTabellaNormaleSKF();
   aggiornaSelectClassi(Array.from(new Set([...classi, ...lavorazioni.map(l => l.classeGioco).filter(Boolean)])).sort());
   renderLista();
   resetForm();
@@ -886,6 +932,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("btn-reset").addEventListener("click", resetForm);
   $("btn-elimina").addEventListener("click", eliminaCorrente);
+  $("serieGioco").addEventListener("change", aggiornaGiocoIntegrato);
   $("classeGioco").addEventListener("change", aggiornaGiocoIntegrato);
   $("irDiametro").addEventListener("change", aggiornaGiocoIntegrato);
   $("irDiametro").addEventListener("input", aggiornaGiocoIntegrato);
