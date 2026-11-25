@@ -1,0 +1,62 @@
+name: Installa motore OCR locale
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: local-ocr-assets
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+      - name: Scarica solo i pacchetti OCR con versioni fisse
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          target="$PWD/vendor/ocr"
+          mkdir -p "$target/core" "$target/lang"
+          cd "$tmp"
+          npm pack --ignore-scripts tesseract.js@6.0.1
+          npm pack --ignore-scripts tesseract.js-core@6.0.0
+          npm pack --ignore-scripts @tesseract.js-data/eng@1.0.0
+          tar -xOf tesseract.js-6.0.1.tgz package/dist/tesseract.min.js > "$target/tesseract.min.js"
+          tar -xOf tesseract.js-6.0.1.tgz package/dist/worker.min.js > "$target/worker.min.js"
+          tar -xOf tesseract.js-6.0.1.tgz package/LICENSE.md > "$target/LICENSE-tesseract.txt" || tar -xOf tesseract.js-6.0.1.tgz package/LICENSE > "$target/LICENSE-tesseract.txt"
+          for file in tesseract-core.wasm.js tesseract-core-simd.wasm.js tesseract-core-lstm.wasm.js tesseract-core-simd-lstm.wasm.js; do
+            tar -xOf tesseract.js-core-6.0.0.tgz "package/$file" > "$target/core/$file"
+            test -s "$target/core/$file"
+          done
+          for file in tesseract-core.wasm tesseract-core-simd.wasm tesseract-core-lstm.wasm tesseract-core-simd-lstm.wasm; do
+            if tar -tf tesseract.js-core-6.0.0.tgz | grep -Fx "package/$file" >/dev/null; then
+              tar -xOf tesseract.js-core-6.0.0.tgz "package/$file" > "$target/core/$file"
+            fi
+          done
+          tar -xOf tesseract.js-core-6.0.0.tgz package/LICENSE > "$target/LICENSE-core.txt" || tar -xOf tesseract.js-core-6.0.0.tgz package/LICENSE.md > "$target/LICENSE-core.txt"
+          tar -xOf tesseract.js-data-eng-1.0.0.tgz package/4.0.0_best_int/eng.traineddata.gz > "$target/lang/eng.traineddata.gz"
+          gzip -t "$target/lang/eng.traineddata.gz"
+          test -s "$target/tesseract.min.js"
+          test -s "$target/worker.min.js"
+          node --check "$target/tesseract.min.js"
+          node --check "$target/worker.min.js"
+          printf '%s\n' 'Tesseract.js 6.0.1; core 6.0.0; English traineddata 1.0.0 (best_int). Apache 2.0. Only public OCR runtime files; no recipes or drawings.' > "$target/README.txt"
+          cd "$target"
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+      - name: Salva esclusivamente i file pubblici del motore
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- vendor/ocr/
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Install pinned local OCR runtime assets'
+            git push origin HEAD:main
+          fi
+          echo "## Motore OCR installato nel repository" >> "$GITHUB_STEP_SUMMARY"
+          echo "File pubblici del motore verificati. Nessun disegno o ricetta letto. Serve un successivo aggiornamento Pages per distribuirli." >> "$GITHUB_STEP_SUMMARY"

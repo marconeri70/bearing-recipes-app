@@ -357,7 +357,7 @@ async function showHistory(row){
 }
 
 
-function clearOCR(){$("ocr-text").value="";$("ocr-result").replaceChildren();}
+function clearOCR(){$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";}
 function parseDrawingText(raw){
  const text=String(raw||"").slice(0,60000).replace(/\r/g,"");
  const results=[];
@@ -395,20 +395,50 @@ function renderOCR(){
  };result.append(apply);
 }
 $("ocr-suggest").onclick=()=>{if(draft&&!busy)renderOCR();};
+let ocrLibraryPromise=null;
+function loadOcrLibrary(){
+ if(globalThis.Tesseract?.createWorker)return Promise.resolve(globalThis.Tesseract);
+ if(!ocrLibraryPromise)ocrLibraryPromise=new Promise((resolve,reject)=>{
+  const tag=document.createElement("script");tag.src=new URL("./vendor/ocr/tesseract.min.js",document.baseURI).href;
+  const timer=setTimeout(()=>{tag.remove();reject(Error("Caricamento motore OCR non riuscito."));},25000);
+  tag.onload=()=>{clearTimeout(timer);if(globalThis.Tesseract?.createWorker)resolve(globalThis.Tesseract);else reject(Error("Motore OCR non valido."));};
+  tag.onerror=()=>{clearTimeout(timer);tag.remove();reject(Error("Motore OCR non ancora pubblicato. Verifica l’installazione GitHub."));};
+  document.head.append(tag);
+ }).catch(e=>{ocrLibraryPromise=null;throw e;});
+ return ocrLibraryPromise;
+}
+async function readLocalOCR(file){
+ const T=await loadOcrLibrary(),root=new URL("./vendor/ocr/",document.baseURI);
+ const bar=$("ocr-progress"),message=$("ocr-progress-text");
+ bar.hidden=false;bar.value=0;message.textContent="Preparazione del motore OCR…";
+ let worker=null,finished=false,timer;
+ try{
+  const work=(async()=>{
+   const w=await T.createWorker("eng",1,{workerPath:new URL("worker.min.js",root).href,corePath:new URL("core/",root).href,langPath:new URL("lang/",root).href,workerBlobURL:false,cacheMethod:"none",gzip:true,
+    logger:m=>{if(finished)return;const p=Number(m.progress);bar.value=Number.isFinite(p)?Math.round(Math.max(0,Math.min(1,p))*100):0;message.textContent=m.status==="recognizing text"?"Riconoscimento testo: "+bar.value+"%":"Preparazione OCR: "+bar.value+"%";}});
+   if(finished){await w.terminate();throw Error("OCR interrotto.");}worker=w;
+   await worker.setParameters({tessedit_pageseg_mode:"11"});
+   const ret=await worker.recognize(file);
+   return String(ret?.data?.text||"").trim();
+  })();
+  return await Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Riconoscimento troppo lungo. Riprova con una fotografia più nitida o ritagliata.")),180000);})]);
+ }finally{finished=true;clearTimeout(timer);if(worker)try{await worker.terminate();}catch{}bar.hidden=true;message.textContent="";}
+}
 $("ocr-read").onclick=()=>action(async()=>{
  if(!draft)return;
- const output=$("ocr-result");output.textContent="Lettura locale in corso…";
- let file=editorFile;
+ const output=$("ocr-result");output.textContent="Lettura locale in corso…";$("ocr-read").disabled=true;$("ocr-suggest").disabled=true;
  try{
+  let file=editorFile;
   if(!file&&keyPattern.test(draft.base.disegnoR2Key||""))file=await(await request("/api/photos?key="+encodeURIComponent(draft.base.disegnoR2Key))).blob();
   if(!file)throw Error("Seleziona una foto o una ricetta con disegno R2.");
-  if(!("TextDetector" in globalThis))throw Error("Il browser non supporta il riconoscimento locale nativo. Puoi trascrivere o incollare il testo nel campo sottostante.");
-  const image=await createImageBitmap(file);
-  try{const blocks=await new TextDetector().detect(image);$("ocr-text").value=blocks.map(b=>b.rawValue||"").join("\n");}finally{image.close();}
-  renderOCR();
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||!file.size||file.size>8*1024*1024)throw Error("Foto non valida.");
+  const text=await readLocalOCR(file);
+  if(!text)throw Error("Nessun testo riconosciuto. Prova con una foto più nitida.");
+  if(!draft||!connected)return;
+  $("ocr-text").value=text;renderOCR();
  }catch(e){output.textContent=e.message;throw e;}
+ finally{$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
 });
-
 function closeEditor(){clearOCR();
  draft=null;editorFile=null;$("editor-form").reset();$("editor-file-status").textContent="";$("editor-status").textContent="";$("cloud-editor").hidden=true;
 }
