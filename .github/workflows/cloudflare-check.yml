@@ -1,0 +1,41 @@
+name: Cloudflare - verifica connessione
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Controllo API in sola lettura
+        shell: python
+        run: |
+          import os, json, urllib.request, urllib.error
+          token = os.environ.get("CF_TOKEN", "")
+          if not token:
+              raise SystemExit("Secret CLOUDFLARE_API_TOKEN mancante.")
+          def get(path):
+              req = urllib.request.Request("https://api.cloudflare.com/client/v4" + path, headers={"Authorization": "Bearer " + token, "Accept": "application/json"})
+              try:
+                  with urllib.request.urlopen(req, timeout=25) as response:
+                      data = json.load(response)
+              except urllib.error.HTTPError as e:
+                  return None, e.code
+              return (data.get("result") if data.get("success") else None), 200
+          verified, code = get("/user/tokens/verify")
+          if not verified or verified.get("status") != "active":
+              raise SystemExit("Token non verificato (HTTP %s)." % code)
+          print("Token attivo.")
+          accounts, code = get("/accounts?per_page=50")
+          if not isinstance(accounts, list) or len(accounts) != 1:
+              raise SystemExit("Impossibile identificare un solo account (HTTP %s)." % code)
+          account = accounts[0]["id"]
+          for label, path in [("D1", "/d1/database?per_page=1"), ("R2", "/r2/buckets"), ("Workers", "/workers/scripts")]:
+              result, code = get("/accounts/" + account + path)
+              print(label + ": " + ("accesso in lettura OK" if result is not None else "non verificato (HTTP %s)" % code))
+              if result is None:
+                  raise SystemExit("Verifica incompleta; nessuna risorsa modificata.")
+          print("Connessione verificata. Nessuna risorsa creata o modificata.")
