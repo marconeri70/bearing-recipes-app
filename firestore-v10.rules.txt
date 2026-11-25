@@ -1,0 +1,19 @@
+// Inserire PRIMA di match /{document=**} nelle regole esistenti.
+// Non modificare le raccolte originali né la funzione amministratore().
+match /bearing_recipes_v10/{docId} {
+  allow read: if amministratore();
+  allow create: if amministratore()
+    && request.resource.data.ownerUid == request.auth.uid
+    && request.resource.data.rev == 1;
+  allow update: if amministratore()
+    && request.resource.data.ownerUid == request.auth.uid
+    && request.resource.data.code == resource.data.code
+    && request.resource.data.rev == resource.data.rev + 1;
+  allow delete: if false;
+  match /history/{versionId} {
+    allow read: if amministratore();
+    allow create: if amministratore()
+      && request.resource.data.ownerUid == request.auth.uid;
+    allow update, delete: if false;
+  }
+}
