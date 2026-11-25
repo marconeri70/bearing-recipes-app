@@ -1,0 +1,65 @@
+name: Cloudflare - crea archivi ricette
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-ricette-infrastructure
+  cancel-in-progress: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Crea solo D1 e R2 dedicati alle ricette
+        shell: python
+        run: |
+          import os, json, urllib.request, urllib.error, urllib.parse
+          token = os.environ.get("CF_TOKEN", "")
+          if not token:
+              raise SystemExit("Secret mancante.")
+          DB = "skf-ricette-db"
+          BUCKET = "skf-ricette-foto"
+          def api(path, method="GET", body=None, eu=False):
+              headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+              if eu:
+                  headers["cf-r2-jurisdiction"] = "eu"
+              if body is not None:
+                  headers["Content-Type"] = "application/json"
+              req = urllib.request.Request("https://api.cloudflare.com/client/v4" + path, data=json.dumps(body).encode() if body is not None else None, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      data = json.load(response)
+              except urllib.error.HTTPError as e:
+                  raise SystemExit("API Cloudflare HTTP %s. Nessun tentativo di aggirare permessi, attivare fatturazione o modificare altre risorse." % e.code)
+              if not data.get("success"):
+                  raise SystemExit("API Cloudflare ha rifiutato l'operazione.")
+              return data.get("result")
+          accounts = api("/accounts?per_page=50")
+          if not isinstance(accounts, list) or len(accounts) != 1:
+              raise SystemExit("Account non univoco: interrompo.")
+          prefix = "/accounts/" + accounts[0]["id"]
+          # Preflight di entrambi gli archivi prima di effettuare scritture.
+          databases = api(prefix + "/d1/database?name=" + urllib.parse.quote(DB) + "&per_page=100")
+          existing_db = [d for d in databases if d.get("name") == DB]
+          if len(existing_db) > 1 or any(d.get("jurisdiction") != "eu" for d in existing_db):
+              raise SystemExit("Database omonimo con giurisdizione diversa o non verificabile: nessuna modifica.")
+          buckets = api(prefix + "/r2/buckets?per_page=1000", eu=True)
+          existing_bucket = [b for b in buckets.get("buckets", []) if b.get("name") == BUCKET]
+          def verify_private():
+              managed = api(prefix + "/r2/buckets/" + BUCKET + "/domains/managed", eu=True)
+              custom = api(prefix + "/r2/buckets/" + BUCKET + "/domains/custom", eu=True)
+              if not isinstance(managed, dict) or managed.get("enabled") is not False or not isinstance(custom, dict) or custom.get("domains") != []:
+                  raise SystemExit("Accesso pubblico R2 non escluso: interrompo senza cambiare le impostazioni.")
+          if existing_bucket:
+              verify_private()
+          else:
+              api(prefix + "/r2/buckets", "POST", {"name": BUCKET, "storageClass": "Standard"}, eu=True)
+              verify_private()
+          print("R2: skf-ricette-foto presente, accesso pubblico disabilitato, giurisdizione UE.")
+          if not existing_db:
+              api(prefix + "/d1/database", "POST", {"name": DB, "jurisdiction": "eu"})
+          print("D1: skf-ricette-db presente.")
+          print("Nessun Worker esistente modificato. Nessun dato importato.")
