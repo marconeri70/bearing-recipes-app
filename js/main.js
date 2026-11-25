@@ -29,6 +29,7 @@ let immagineCorrenteData = "";
 let filtroTesto = "";
 let filtroClasse = "";
 let fotoUploadInCorso = false;
+let syncController = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -166,11 +167,15 @@ function chiudiZoomImmagine() {
 function mostraForm() {
   const card = $("card-form");
   if (card) card.classList.remove("is-hidden");
+  $("recipes-section").classList.add("is-hidden");
+  $("overview").classList.add("is-hidden");
+  $("cloud-section").classList.add("is-hidden");
 }
 
 function nascondiForm() {
   const card = $("card-form");
   if (card) card.classList.add("is-hidden");
+  if ($("cloud-section").classList.contains("is-hidden")) { $("recipes-section").classList.remove("is-hidden"); $("overview").classList.remove("is-hidden"); }
 }
 
 function aggiornaStatoSchedaButton() {
@@ -217,6 +222,9 @@ function caricaDaStorage() {
 function aggiornaConteggio() {
   const label = $("recipes-count");
   if (label) label.textContent = lavorazioni.length;
+  $("metric-total").textContent = lavorazioni.length;
+  $("metric-drawings").textContent = lavorazioni.filter(r=>r.disegnoUrl||r.disegnoData).length;
+  $("metric-classes").textContent = new Set(lavorazioni.map(r=>r.classeGioco).filter(Boolean)).size;
 }
 
 function ricetteFiltrate() {
@@ -248,16 +256,15 @@ function renderLista() {
     riga.className = "riga-lavorazione";
     if (lav.id === idCorrente) riga.classList.add("active");
 
-    riga.addEventListener("click", () => {
-      caricaLavorazioneInForm(lav.id);
-      nascondiForm();
-      apriSchedaTecnica();
-    });
+    const open = () => { caricaLavorazioneInForm(lav.id); nascondiForm(); apriSchedaTecnica(); };
+    riga.tabIndex = 0; riga.setAttribute("role","button"); riga.setAttribute("aria-label","Apri scheda "+lav.codice);
+    riga.addEventListener("click",open);
+    riga.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}});
 
     const left = document.createElement("div");
     left.className = "riga-left-content";
 
-    const imgUrl = normalizzaUrlImmagine(lav.disegnoUrl || "");
+    const imgUrl = normalizzaUrlImmagine(lav.disegnoUrl || "") || lav.disegnoData || "";
     if (imgUrl) {
       const thumb = document.createElement("img");
       thumb.className = "riga-thumb";
@@ -291,7 +298,7 @@ function renderLista() {
       badge.textContent = lav.classeGioco;
       actions.appendChild(badge);
     }
-    if (lav.disegnoUrl) {
+    if (lav.disegnoUrl || lav.disegnoData) {
       const badge = document.createElement("span");
       badge.className = "badge badge-disegno";
       badge.textContent = "Disegno";
@@ -404,7 +411,8 @@ function gestisciSubmit(event) {
   idCorrente = lav.id;
   renderLista();
   nascondiForm();
-  alert("Lavorazione salvata.");
+  syncController?.changed();
+  alert("Lavorazione salvata sul dispositivo.");
 }
 
 function eliminaCorrente() {
@@ -414,6 +422,7 @@ function eliminaCorrente() {
   const next = lavorazioni.filter(l => l.id !== idCorrente);
   if (!salvaSuStorage(next)) return;
   lavorazioni = next;
+  syncController?.deleted(lav).catch(e=>console.warn("Cancellazione cloud non registrata",e));
   resetForm();
   nascondiForm();
 }
@@ -659,6 +668,7 @@ function aggiungiRicetteSenzaDuplicati(nuovi, origine = "file") {
   if (!salvaSuStorage(next)) return;
   lavorazioni = next;
   renderLista();
+  syncController?.changed();
   alert(`Importazione ${origine}: ${aggiunte} ricette aggiunte, ${saltate} duplicate/non valide ignorate.`);
 }
 
@@ -1014,6 +1024,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("filtro-ricette")?.addEventListener("input", (e) => { filtroTesto = e.target.value; renderLista(); });
   $("filtro-classe")?.addEventListener("change", (e) => { filtroClasse = e.target.value; renderLista(); });
+  const showRecipes=()=>{ $("cloud-section").classList.add("is-hidden"); nascondiForm(); $("overview").classList.remove("is-hidden"); $("recipes-section").classList.remove("is-hidden"); window.scrollTo(0,0); };
+  $("nav-recipes").onclick=()=>{if(!$("card-form").classList.contains("is-hidden")&&!confirm("Tornare al catalogo senza salvare le modifiche?"))return;showRecipes();};
+  $("form-back").onclick=()=>{if(confirm("Tornare al catalogo senza salvare le modifiche?"))showRecipes();};
+  $("cloud-back").onclick=showRecipes;
+  $("nav-cloud").onclick=()=>{if(!$("card-form").classList.contains("is-hidden")&&!confirm("Aprire il cloud senza salvare le modifiche?"))return; $("cloud-section").classList.remove("is-hidden");nascondiForm();$("overview").classList.add("is-hidden");$("recipes-section").classList.add("is-hidden");window.scrollTo(0,0);};
   // Import dinamico: un problema di rete Firebase non blocca le funzioni locali.
   import("./api/firebase-recovery.js").then(m => m.installFirebasePanel({
     getLocal: () => lavorazioni,
@@ -1026,7 +1041,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       $("filtro-classe").value = filtroClasse;
     },
     download: scaricaBlob
-  })).catch(e => {
+  })).then(()=>import("./api/firebase-sync.js")).then(m=>{
+    syncController=m.installSync({getLocal:()=>lavorazioni,canApply:()=>$("card-form").classList.contains("is-hidden")&&$("scheda-modal").classList.contains("is-hidden")&&!fotoUploadInCorso,download:scaricaBlob,replaceLocal:(code,record)=>{
+      const current=lavorazioni.find(r=>String(r.codice||"").trim().toLowerCase()===code);
+      const next=lavorazioni.filter(r=>String(r.codice||"").trim().toLowerCase()!==code);
+      if(record)next.push({...current,...record,id:current?.id||generaId()});
+      if(!salvaSuStorage(next))return false;
+      lavorazioni=next;
+      const opts=Array.from($("classeGioco").options).map(o=>o.value).filter(Boolean);
+      aggiornaSelectClassi(Array.from(new Set([...opts,...next.map(r=>r.classeGioco).filter(Boolean)])).sort());$("filtro-classe").value=filtroClasse;
+      renderLista();return true;
+    }});
+  }).catch(e => {
     console.warn("Firebase non disponibile", e);
     $("firebase-status").textContent = "Firebase non disponibile: verifica Internet e riapri l'app. Le funzioni locali restano utilizzabili.";
   });
