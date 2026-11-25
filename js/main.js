@@ -1014,4 +1014,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("filtro-ricette")?.addEventListener("input", (e) => { filtroTesto = e.target.value; renderLista(); });
   $("filtro-classe")?.addEventListener("change", (e) => { filtroClasse = e.target.value; renderLista(); });
+  // Import dinamico: un problema di rete Firebase non blocca le funzioni locali.
+  import("./api/firebase-recovery.js").then(m => m.installFirebasePanel({
+    getLocal: () => lavorazioni,
+    importSelected: rows => {
+      aggiungiRicetteSenzaDuplicati(rows, "Firebase");
+      const options = Array.from($("classeGioco").options).map(o => o.value).filter(Boolean);
+      const previousClass = $("classeGioco").value;
+      aggiornaSelectClassi(Array.from(new Set([...options, ...lavorazioni.map(r=>r.classeGioco).filter(Boolean)])).sort());
+      $("classeGioco").value = previousClass;
+      $("filtro-classe").value = filtroClasse;
+    },
+    download: scaricaBlob
+  })).catch(e => {
+    console.warn("Firebase non disponibile", e);
+    $("firebase-status").textContent = "Firebase non disponibile: verifica Internet e riapri l'app. Le funzioni locali restano utilizzabili.";
+  });
 });
