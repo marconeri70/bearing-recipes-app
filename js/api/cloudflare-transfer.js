@@ -3,7 +3,7 @@ const LOCAL="bearing_recipes_lavorazioni_v2";
 const $=id=>document.getElementById(id);
 const code=r=>String(r?.codice??"").trim().toLowerCase();
 const keyPattern=/^drawings\/[a-f0-9-]{36}\.(jpg|png|webp)$/;
-let token="",connected=false,busy=false,local=[],remote=[],raw=null,viewUrl=null,activeView="catalog",sheetCode=null;
+let token="",sessionExpiry=0,connected=false,busy=false,local=[],remote=[],raw=null,viewUrl=null,activeView="catalog",sheetCode=null;
 function element(tag,text,cls){const e=document.createElement(tag);if(text!=null)e.textContent=text;if(cls)e.className=cls;return e;}
 function status(text,error=false){$("status").textContent=text;$("status").dataset.error=String(error);}
 function download(obj,name){const url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}));const a=element("a");a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}
@@ -14,10 +14,14 @@ function readLocal(){
  catch(e){local=[];$("local-status").textContent="Lettura non riuscita: "+e.message;}
  $("local-count").textContent=local.length;$("local-backup").disabled=raw===null;
 }
+const SESSION_KEY="bearing-recipes-v116-tab-session";
+function removeSession(){try{sessionStorage.removeItem(SESSION_KEY);}catch{}}
+function rememberSession(){try{sessionStorage.setItem(SESSION_KEY,JSON.stringify({token,expiresAt:sessionExpiry}));return true;}catch{return false;}}
+const isSession=t=>/^s1\.[a-f0-9]{64}$/.test(t);
 async function request(path,opts={}){
  if(!token)throw Error("Collega prima l'archivio.");
  const r=await fetch(API+path,{...opts,headers:{"Authorization":"Bearer "+token,...opts.headers},cache:"no-store",credentials:"omit",redirect:"error",referrerPolicy:"no-referrer"});
- if(!r.ok){let msg="HTTP "+r.status;try{msg=(await r.json()).error||msg;}catch{}throw Error(msg);}
+ if(!r.ok){let msg="HTTP "+r.status;try{msg=(await r.json()).error||msg;}catch{}const err=Error(msg);err.status=r.status;throw err;}
  return r;
 }
 async function json(path,opts){return (await request(path,opts)).json();}
@@ -200,7 +204,7 @@ function navigate(view){
 }
 $("nav-catalog").onclick=()=>navigate("catalog");$("nav-backup").onclick=()=>navigate("backup");$("back-catalog").onclick=()=>navigate("catalog");
 
-async function action(fn){if(busy)return;busy=true;syncControls();try{await fn();}catch(e){status(e.message||String(e),true);}finally{busy=false;syncControls();}}
+async function action(fn){if(busy)return;busy=true;syncControls();try{await fn();}catch(e){if(e.status===401&&connected)disconnectLocal("Sessione scaduta o revocata. Accedi di nuovo.");else status(e.message||String(e),true);}finally{busy=false;syncControls();}}
 async function showPhoto(r){await action(async()=>{photoClear();const response=await request("/api/photos?key="+encodeURIComponent(r.disegnoR2Key));const blob=await response.blob();if(!/^image\/(jpeg|png|webp)$/.test(blob.type))throw Error("Formato foto non valido.");viewUrl=URL.createObjectURL(blob);const img=element("img");img.src=viewUrl;img.alt="Disegno "+r.codice;const close=button("Chiudi foto",photoClear);$("photo-view").append(element("h2",r.codice),img,close);$("photo-view").scrollIntoView({block:"start"});status("Disegno privato visualizzato.");});}
 async function upload(blob){if(!blob||!/^image\/(jpeg|png|webp)$/.test(blob.type)||blob.size===0||blob.size>8*1024*1024)throw Error("Foto non valida: JPG, PNG o WebP fino a 8 MB.");const out=await json("/api/photos",{method:"POST",headers:{"Content-Type":blob.type},body:blob});if(!keyPattern.test(out.key||""))throw Error("Riferimento R2 non valido.");const check=await request("/api/photos?key="+encodeURIComponent(out.key));const copy=await check.blob();if(copy.size!==blob.size||copy.type!==blob.type)throw Error("Verifica foto non riuscita. Ricetta non trasferita.");const hash=async b=>new Uint8Array(await crypto.subtle.digest("SHA-256",await b.arrayBuffer()));const a=await hash(blob),b=await hash(copy);if(a.some((v,i)=>v!==b[i]))throw Error("Verifica integrità foto fallita.");return out.key;}
 const fields=["codice","irTipo","irDiametro","orTipo","orDiametro","diametroSfera","numeroSfere","gabbiaTipo","grassoTipo","schermoTipo","pesoMin","pesoMax","classeGioco","serieGioco","giocoMin","giocoMax"];
@@ -229,12 +233,38 @@ async function transfer(r,file,retain){
  });
 }
 $("local-backup").onclick=()=>{if(raw===null)return;download({formato:"bearing-recipes-backup",versione:11,ricette:local,rawLocal:raw,creatoIl:new Date().toISOString()},"backup-locale-ricette-"+filename()+".json");};
+async function connectSession(){
+ const check=await json("/api/check");if(!check.database||!check.photos)throw Error("Verifica archivi non riuscita.");
+ await loadRemote();connected=true;activeView="catalog";render();
+ status(isSession(token)?"Sessione attiva fino alle "+new Date(sessionExpiry).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})+".":"Catalogo collegato con il Worker precedente. Sessione temporanea non ancora disponibile.");
+}
+function disconnectLocal(message,forget=true){
+ if(forget)removeSession();token="";sessionExpiry=0;connected=false;remote=[];resetPhotoCache();activeView="catalog";closeEditor();clearSheet();clearRestore();render();status(message);
+}
 $("login").onclick=()=>action(async()=>{
  token=$("key").value;$("key").value="";
- if(token.length<32||token.length>128){token="";throw Error("Inserisci la chiave amministratore creata su GitHub, non il token Cloudflare.");}
- try{const check=await json("/api/check");if(!check.database||!check.photos)throw Error("Verifica archivi non riuscita.");await loadRemote();connected=true;activeView="catalog";render();status("Catalogo aggiornato. Le ricette cloud sono disponibili.");}catch(e){token="";connected=false;remote=[];render();throw e;}
+ if(token.length<32||token.length>128){token="";throw Error("Inserisci la chiave amministratore, non il token Cloudflare.");}
+ try{
+  const health=await fetch(API+"/health",{cache:"no-store",credentials:"omit",redirect:"error"}).then(r=>r.json());
+  if(health.sessions===true){
+   const session=await json("/api/session",{method:"POST"});
+   if(!isSession(session.token)||!Number.isFinite(session.expiresAt)||session.expiresAt<=Date.now()||session.expiresAt>Date.now()+4*60*60*1000+30000)throw Error("Sessione ricevuta non valida.");
+   token=session.token;sessionExpiry=session.expiresAt;
+  }
+  await connectSession();
+  if(isSession(token)&&$("remember-session").checked&&!rememberSession())status("Sessione attiva, ma il browser non permette di mantenerla dopo un aggiornamento.");
+ }catch(e){disconnectLocal("Accesso non riuscito.");throw e;}
 });
-$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";clearSheet();clearRestore();render();status("Disconnesso.");};
+$("logout").onclick=()=>{
+ if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;
+ action(async()=>{let message="Disconnesso.";if(isSession(token)){try{const result=await json("/api/session/end",{method:"POST"});if(!result.ended)throw Error("Revoca non confermata");}catch{message="Disconnesso sul dispositivo. Revoca server non confermata: la sessione scadrà automaticamente.";}}disconnectLocal(message);});
+};
+async function resumeSession(){
+ let saved;try{saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null");}catch{}
+ if(!saved||!isSession(saved.token)||!Number.isFinite(saved.expiresAt)||saved.expiresAt<=Date.now()||saved.expiresAt>Date.now()+4*60*60*1000+30000){removeSession();return;}
+ token=saved.token;sessionExpiry=saved.expiresAt;
+ await action(async()=>{try{await connectSession();}catch(e){disconnectLocal("Sessione non disponibile. Accedi di nuovo.");throw e;}});
+}
 $("refresh").onclick=()=>action(async()=>{await loadRemote();render();status("Archivio aggiornato.");});
 function toData(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
 $("cloud-backup").onclick=()=>action(async()=>{
@@ -326,14 +356,67 @@ async function showHistory(row){
  });
 }
 
-function closeEditor(){
+
+function clearOCR(){$("ocr-text").value="";$("ocr-result").replaceChildren();}
+function parseDrawingText(raw){
+ const text=String(raw||"").slice(0,60000).replace(/\r/g,"");
+ const results=[];
+ const add=(key,value,evidence)=>{if(value!==null&&value!==undefined&&String(value).trim())results.push({key,value,evidence:String(evidence).slice(0,180)});};
+ const unique=(key,re,transform=x=>x)=>{
+  const found=[...text.matchAll(re)].map(m=>({value:transform(m[1]),evidence:m[0]})).filter(x=>x.value!==null&&x.value!==undefined&&x.value!=="");
+  if(found.length&&new Set(found.map(x=>String(x.value).toUpperCase())).size===1)add(key,found[0].value,found[0].evidence);
+ };
+ const num=x=>numberValue(x);
+ unique("irTipo",/\b(?:IR|INNER RING)\s*[:=-]?\s*(IR[- ][A-Z0-9-]{2,25})\b/gi);
+ unique("orTipo",/\b(?:OR|OUTER RING)\s*[:=-]?\s*(OR[- ][A-Z0-9-]{2,25})\b/gi);
+ unique("irDiametro",/\b(?:BORE(?: DIAMETER)?|FORO IR|IR DIAMETER)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,num);
+ unique("orDiametro",/\b(?:OUTER DIAMETER|ESTERNO OR|OR DIAMETER)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,num);
+ unique("classeGioco",/\b(?:RADIAL CLEARANCE|GIOCO RADIALE)\s*[:=.-]?\s*(C[2-5][LH]?|CN[LH]?)\b/gi,x=>x.toUpperCase());
+ unique("grassoTipo",/\b(?:GREASE TYPE|TIPO GRASSO)\s*[:=.-]?\s*([A-Z0-9_-]{2,24})\b/gi,x=>x.toUpperCase());
+ unique("diametroSfera",/\b(?:BALL DIAMETER|DIAMETRO SFERA)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,num);
+ unique("numeroSfere",/\b(?:NUMBER OF BALLS|BALL COUNT|NUMERO SFERE)\s*[:=]?\s*(\d+)\b/gi,num);
+ const weights=[...text.matchAll(/\b(?:GREASE QUANTITY|QUANTIT[ÀA] GRASSO)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(?:to|–|-|a)\s*(\d+(?:[.,]\d+)?)\s*g\b/gi)].map(m=>({min:num(m[1]),max:num(m[2]),ev:m[0]})).filter(m=>m.min!==null&&m.max!==null&&m.min<=m.max);
+ if(weights.length&&new Set(weights.map(m=>m.min+"|"+m.max)).size===1){add("pesoMin",weights[0].min,weights[0].ev);add("pesoMax",weights[0].max,weights[0].ev);}
+ return results;
+}
+function renderOCR(){
+ const result=$("ocr-result");result.replaceChildren();
+ const items=parseDrawingText($("ocr-text").value);
+ if(!items.length){result.textContent="Nessun dato con etichetta esplicita riconosciuto. Controlla il disegno e completa manualmente.";return;}
+ result.append(element("strong","Proposte da verificare: "+items.length));
+ const checks=[];
+ for(const item of items){
+  const l=element("label"),cb=element("input");cb.type="checkbox";const current=$("ed-"+item.key)?.value;
+  const content=element("span",fieldLabels[item.key]+": "+item.value+(current?" (attuale: "+current+")":""));content.append(element("small",item.evidence));l.append(cb,content);result.append(l);checks.push([cb,item]);
+ }
+ const apply=element("button","Applica solo i campi selezionati");apply.type="button";apply.className="secondary";apply.onclick=()=>{
+  if(!draft||busy)return;const chosen=checks.filter(([cb])=>cb.checked);if(!chosen.length||!confirm("Applicare "+chosen.length+" valori verificati? Nessun dato sarà salvato prima della conferma della ricetta."))return;
+  for(const [,item] of chosen)$("ed-"+item.key).value=item.value;previewSKF();result.replaceChildren(element("p","Valori inseriti nella scheda, non ancora salvati."));
+ };result.append(apply);
+}
+$("ocr-suggest").onclick=()=>{if(draft&&!busy)renderOCR();};
+$("ocr-read").onclick=()=>action(async()=>{
+ if(!draft)return;
+ const output=$("ocr-result");output.textContent="Lettura locale in corso…";
+ let file=editorFile;
+ try{
+  if(!file&&keyPattern.test(draft.base.disegnoR2Key||""))file=await(await request("/api/photos?key="+encodeURIComponent(draft.base.disegnoR2Key))).blob();
+  if(!file)throw Error("Seleziona una foto o una ricetta con disegno R2.");
+  if(!("TextDetector" in globalThis))throw Error("Il browser non supporta il riconoscimento locale nativo. Puoi trascrivere o incollare il testo nel campo sottostante.");
+  const image=await createImageBitmap(file);
+  try{const blocks=await new TextDetector().detect(image);$("ocr-text").value=blocks.map(b=>b.rawValue||"").join("\n");}finally{image.close();}
+  renderOCR();
+ }catch(e){output.textContent=e.message;throw e;}
+});
+
+function closeEditor(){clearOCR();
  draft=null;editorFile=null;$("editor-form").reset();$("editor-file-status").textContent="";$("editor-status").textContent="";$("cloud-editor").hidden=true;
 }
 function openEditor(row=null,source=null){
  if(!connected||busy)return;
  if(draft&&!confirm("Abbandonare le modifiche non salvate?"))return;
  clearSheet();activeView="catalog";const base= row?{...row.recipe}:source?Object.fromEntries(fields.filter(k=>k!=="codice"&&source.recipe[k]!=null).map(k=>[k,source.recipe[k]])):{};draft={row,base,duplicated:!!source};
- editorFile=null;$("editor-form").reset();$("editor-fields").replaceChildren();$("editor-status").textContent="";$("editor-file-status").textContent="";
+ editorFile=null;clearOCR();$("editor-form").reset();$("editor-fields").replaceChildren();$("editor-status").textContent="";$("editor-file-status").textContent="";
  $("editor-title").textContent=row?"Modifica "+row.recipe.codice:source?"Duplica da "+source.recipe.codice:"Nuova ricetta cloud";
  $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":source?"Inserisci un nuovo codice, verifica tutti i dati e allega il disegno corretto. Il disegno originale non viene duplicato.":"Nuovo codice nell’archivio online";
  for(const k of fields){
@@ -489,8 +572,9 @@ $("editor-camera").onclick=()=>$("editor-capture").click();
 $("editor-cancel").onclick=()=>{if(!busy&&confirm("Chiudere senza salvare?")){closeEditor();render();$("cloud-catalog").scrollIntoView({block:"start"});}};
 $("editor-form").onsubmit=saveEditor;
 
-window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";closeEditor();clearSheet();clearRestore();render();status("Sessione terminata. Accedi di nuovo.");});
-window.addEventListener("pageshow",e=>{if(e.persisted){busy=false;syncControls();}});
+window.addEventListener("pagehide",()=>{disconnectLocal("Sessione chiusa.",false);});
+window.addEventListener("pageshow",e=>{if(e.persisted){busy=false;syncControls();resumeSession();}});
+setInterval(()=>{if(connected&&sessionExpiry&&Date.now()>=sessionExpiry&&!busy)disconnectLocal("Sessione scaduta. Accedi di nuovo.");},15000);
 let refreshedAt=0;
 async function refreshVisible(){
  if(!connected||busy||draft||sheetCode||activeView!=="catalog"||document.visibilityState!=="visible"||Date.now()-refreshedAt<30000)return;
@@ -500,4 +584,4 @@ document.addEventListener("visibilitychange",refreshVisible);
 window.addEventListener("focus",refreshVisible);
 setInterval(refreshVisible,60000);
 if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
-readLocal();render();loadSKF();
+readLocal();render();loadSKF();resumeSession();
