@@ -2,10 +2,25 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Ricette Lavorazione Cuscinetti</title>
 
-  <link rel="stylesheet" href="./css/styles.css" />
+  <link rel="stylesheet" href="./css/styles.css?v=v10.1-mobile" />
+  <style>
+    /* Critical layout: prevents an oversized logo even if a previous stylesheet is cached. */
+    .header-title{display:flex;align-items:center;gap:10px;min-width:0}
+    .header-title>div:last-child{min-width:0}
+    .brand-mark svg{display:block;width:100%;height:100%;fill:currentColor}
+    @media(max-width:740px){
+      .app-header{position:relative;display:flex;flex-direction:column;align-items:stretch;padding:12px;gap:10px}
+      .header-title h1{font-size:1.08rem;line-height:1.2;margin:0}
+      .header-sub{display:none}
+      .header-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}
+      .tools-menu{grid-column:1/-1}
+      .tools-menu>summary{display:block;cursor:pointer}
+      .tools-menu[open] .tools-popover{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+    }
+  </style>
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#2563eb" />
   <link rel="icon" href="./icon-192.png" />
@@ -24,7 +39,7 @@
 
   <div class="app-container">
     <header class="app-header">
-      <div class="header-title"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="10" r="3"/><circle cx="38" cy="24" r="3"/><circle cx="24" cy="38" r="3"/><circle cx="10" cy="24" r="3"/></svg></div><div><span class="eyebrow">TERMINALE PRODUZIONE · V10</span><h1>Ricette Lavorazione Cuscinetti</h1><span class="header-sub">Archivio tecnico · componenti e controllo qualità</span></div></div>
+      <div class="header-title"><div class="brand-mark" aria-hidden="true" style="width:44px;height:44px;flex:0 0 44px"><svg viewBox="0 0 48 48" width="30" height="30"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="10" r="3"/><circle cx="38" cy="24" r="3"/><circle cx="24" cy="38" r="3"/><circle cx="10" cy="24" r="3"/></svg></div><div><span class="eyebrow">TERMINALE PRODUZIONE · V10.1</span><h1>Ricette Lavorazione Cuscinetti</h1><span class="header-sub">Archivio tecnico · componenti e controllo qualità</span></div></div>
       <div class="header-actions"><button type="button" id="nav-recipes" class="btn btn-light">Ricette</button><button type="button" id="nav-cloud" class="btn btn-light">Cloud e backup</button><details class="tools-menu"><summary>Importa / esporta</summary><div class="tools-popover">
         <button id="btn-export-csv" class="btn btn-light" type="button">⬇️ Esporta CSV</button>
         <button id="btn-import" class="btn btn-light" type="button">⬆️ Importa CSV</button>

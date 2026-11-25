@@ -1,11 +1,12 @@
 // sw.js - PWA Ricette Lavorazione Cuscinetti
 // Cache network-first per evitare che il telefono resti bloccato su vecchie versioni.
 
-const CACHE_NAME = 'bearing-recipes-v16-dashboard-sync';
+const CACHE_NAME = 'bearing-recipes-v17-mobile-compact';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './css/styles.css',
+  './css/styles.css?v=v10.1-mobile',
   './js/main.js',
   './js/api/vision.js',
   './js/api/cloud-client.js',
