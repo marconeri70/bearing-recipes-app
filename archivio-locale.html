@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Ricette Lavorazione Cuscinetti</title>
+
+  <link rel="stylesheet" href="./css/styles.css?v=v10.2-diametri" />
+  <style>
+    /* Critical layout: prevents an oversized logo even if a previous stylesheet is cached. */
+    .header-title{display:flex;align-items:center;gap:10px;min-width:0}
+    .header-title>div:last-child{min-width:0}
+    .brand-mark svg{display:block;width:100%;height:100%;fill:currentColor}
+    @media(max-width:740px){
+      .app-header{position:relative;display:flex;flex-direction:column;align-items:stretch;padding:12px;gap:10px}
+      .header-title h1{font-size:1.08rem;line-height:1.2;margin:0}
+      .header-sub{display:none}
+      .header-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}
+      .tools-menu{grid-column:1/-1}
+      .tools-menu>summary{display:block;cursor:pointer}
+      .tools-menu[open] .tools-popover{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+    }
+  </style>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+</head>
+<body>
+  <div id="kiosk-overlay" class="kiosk-overlay is-hidden">
+    <div class="kiosk-modal">
+      <h2>Sblocco Terminale</h2>
+      <p>Inserisci il PIN operatore per accedere alla gestione ricette.</p>
+      <input type="password" id="kiosk-pin" inputmode="numeric" pattern="[0-9]*" placeholder="••••" maxlength="4" autocomplete="off" />
+      <div id="kiosk-error" class="error-text is-hidden">PIN errato. Riprovare.</div>
+      <button id="btn-kiosk-unlock" class="btn btn-primary">Sblocca</button>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-title"><div class="brand-mark" aria-hidden="true" style="width:44px;height:44px;flex:0 0 44px"><svg viewBox="0 0 48 48" width="30" height="30"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="10" r="3"/><circle cx="38" cy="24" r="3"/><circle cx="24" cy="38" r="3"/><circle cx="10" cy="24" r="3"/></svg></div><div><span class="eyebrow">TERMINALE PRODUZIONE · V10.2</span><h1>Ricette Lavorazione Cuscinetti</h1><span class="header-sub">Archivio tecnico · componenti e controllo qualità</span></div></div>
+      <div class="header-actions"><button type="button" id="nav-recipes" class="btn btn-light">Ricette</button><button type="button" id="nav-cloud" class="btn btn-light">Cloud e backup</button><details class="tools-menu"><summary>Importa / esporta</summary><div class="tools-popover">
+        <button id="btn-export-csv" class="btn btn-light" type="button">⬇️ Esporta CSV</button>
+        <button id="btn-import" class="btn btn-light" type="button">⬆️ Importa CSV</button>
+        <input type="file" id="file-import" accept=".csv,text/csv" style="display:none" />
+        <button id="btn-backup-json" class="btn btn-light" type="button">💾 Backup JSON</button>
+        <button id="btn-import-json" class="btn btn-light" type="button">📂 Importa JSON</button>
+        <input type="file" id="file-import-json" accept=".json,application/json" style="display:none" />
+        <button id="btn-recupera-archivi" class="btn btn-light" type="button">↩️ Recupera vecchie ricette</button></div></details>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="overview" id="overview"><div><span class="eyebrow">PANORAMICA</span><h2>Archivio lavorazioni</h2><p>Consulta componenti, disegni e limiti di gioco radiale.</p></div><div class="metric-strip"><div class="metric"><span>RICETTE</span><strong id="metric-total">0</strong></div><div class="metric"><span>CON DISEGNO</span><strong id="metric-drawings">0</strong></div><div class="metric"><span>CLASSI GIOCO</span><strong id="metric-classes">0</strong></div><div class="metric cloud-metric"><span>STATO ARCHIVIO</span><strong id="sync-badge" data-state="neutral">Solo locale</strong></div></div></section>
+      <section class="list-section" id="recipes-section">
+        <div class="list-header">
+          <h2>Catalogo ricette <span class="count-pill" id="recipes-count">0</span></h2>
+          <button id="btn-nuova" class="btn btn-primary" type="button">➕ Nuova</button>
+        </div>
+        <div class="toolbar compact-toolbar">
+          <input id="filtro-ricette" class="search-input" type="search" placeholder="Cerca codice, IR, OR..." />
+          <select id="filtro-classe" class="search-input small-select">
+            <option value="">Tutte le classi</option>
+          </select>
+        </div>
+        <section class="diameter-search" aria-labelledby="diameter-heading">
+          <div class="diameter-heading"><h3 id="diameter-heading">Ricerca per diametro</h3><button id="clear-diameters" class="btn btn-light btn-sm" type="button">Azzera diametri</button></div>
+          <div class="diameter-grid">
+            <label for="filtro-ir">Foro IR · d (mm)<input id="filtro-ir" class="search-input" type="text" inputmode="decimal" placeholder="Es. 25" autocomplete="off"></label>
+            <label for="filtro-or">Esterno OR · D (mm)<input id="filtro-or" class="search-input" type="text" inputmode="decimal" placeholder="Es. 52" autocomplete="off"></label>
+          </div>
+          <p class="diameter-summary" id="diameter-summary" aria-live="polite">Inserisci uno o entrambi i diametri.</p>
+          <p class="diameter-missing" id="diameter-missing" aria-live="polite"></p>
+        </section>
+        <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
+        <p class="note">Seleziona una ricetta per aprire la scheda tecnica. Verifica sempre limiti e specifiche approvate prima dell'utilizzo in produzione.</p>
+      </section>
+      <section id="cloud-section" class="list-section is-hidden"><div class="list-header"><h2>Cloud e backup</h2><button id="cloud-back" type="button" class="btn btn-light">← Ricette</button></div>        <section class="sync-panel"><h3>Nuovo archivio Cloudflare · V11</h3><p>Trasferisci le ricette con una procedura controllata. Gli archivi locali e Firebase restano invariati.</p><a class="btn btn-primary" href="./cloudflare-ricette.html">Apri archivio Cloudflare</a></section><details id="firebase-panel" class="firebase-panel">
+          <summary>Recupero originali · Firebase</summary>
+          <p id="firebase-status" role="status" aria-live="polite">Preparazione accesso Google...</p>
+          <div class="firebase-actions">
+            <button id="firebase-login" type="button" class="btn btn-primary" disabled>Accedi con Google</button>
+            <button id="firebase-logout" type="button" class="btn btn-light" disabled>Esci</button>
+            <button id="firebase-read" type="button" class="btn btn-secondary" disabled>Recupera originali</button>
+            <button id="firebase-backup" type="button" class="btn btn-light" disabled>Scarica backup Firebase</button>
+            <button id="firebase-import-selected" type="button" class="btn btn-primary" disabled>Importa selezionate</button>
+          </div>
+          <div id="firebase-records" class="firebase-records"></div>
+          <p class="note">I due archivi originali sono in sola lettura. Se ci sono più versioni dello stesso codice, selezionane una. I codici locali già presenti non vengono sostituiti.</p>
+          <details>
+            <summary>Archivio precedente v9 (opzionale)</summary>
+            <p class="note">Richiede una regola Firestore dedicata. Copia manuale tra dispositivi, con versioni immutabili; nessuna cancellazione o sincronizzazione distruttiva. Non caricare dati aziendali senza autorizzazione.</p>
+            <div class="firebase-actions">
+              <button id="firebase-push" type="button" class="btn btn-secondary" disabled>Archivia copie online</button>
+              <button id="firebase-read-archive" type="button" class="btn btn-light" disabled>Leggi archivio v9</button>
+            </div>
+          </details>
+        </details>
+<section class="sync-panel" aria-labelledby="sync-heading">
+  <div class="panel-title"><span class="eyebrow">ARCHIVIO OPERATIVO</span><h3 id="sync-heading">Sincronizzazione e storico</h3></div>
+  <label class="sync-switch"><input id="sync-toggle" type="checkbox" disabled> Attiva sincronizzazione su questo dispositivo</label>
+  <p id="sync-status" role="status" aria-live="polite">Accedi con Google per iniziare.</p>
+  <div class="firebase-actions"><button id="sync-now" class="btn btn-primary" type="button" disabled>Sincronizza ora</button><button id="sync-export" class="btn btn-light" type="button" disabled>Backup cloud JSON</button></div>
+  <p class="note">Richiede regole Firestore v10. Le modifiche vengono confrontate ogni 30 secondi mentre l'app è aperta. I conflitti richiedono una scelta, le cancellazioni sono recuperabili dallo storico. Non attivare senza autorizzazione aziendale.</p>
+  <div id="sync-conflicts" class="firebase-records"></div>
+  <details><summary>Storico e cestino</summary><div class="history-search"><input id="sync-history-code" class="search-input" placeholder="Codice lavorazione" aria-label="Codice per lo storico"><button id="sync-history" class="btn btn-secondary" type="button" disabled>Cerca versioni</button></div><div id="sync-history-list"></div></details>
+</section><p class="note">Le due raccolte originali sono conservate. I disegni R2 con URL pubblico non sono riservati: verifica le autorizzazioni prima di condividere o caricare documenti.</p></section>
+
+      <section class="form-section">
+        <div id="card-form" class="card is-hidden">
+          <div class="card-header">
+            <h2 id="stato-modifica">Nuova lavorazione</h2><button id="form-back" type="button" class="btn btn-light">← Catalogo</button>
+            <button type="button" id="btn-scheda-tecnica" class="btn btn-secondary btn-sm" disabled>📄 Scheda Tecnica</button>
+          </div>
+
+          <form id="form-lavorazione" autocomplete="off">
+            <div class="form-grid">
+              <div class="form-group full">
+                <label for="codice">Codice lavorazione *</label>
+                <input type="text" id="codice" required placeholder="Es. BB1-2557_CA" />
+              </div>
+            </div>
+
+            <h3 class="section-divider">Geometria e Componenti</h3>
+            <div class="form-grid">
+              <div class="form-group"><label for="irTipo">Tipo Anello Interno (IR)</label><input type="text" id="irTipo" /></div>
+              <div class="form-group"><label for="irDiametro">Diametro foro IR d [mm]</label><input type="number" step="any" id="irDiametro" /></div>
+              <div class="form-group"><label for="orTipo">Tipo Anello Esterno (OR)</label><input type="text" id="orTipo" /></div>
+              <div class="form-group"><label for="orDiametro">Diametro esterno OR D [mm]</label><input type="text" inputmode="decimal" id="orDiametro" placeholder="Es. 52" /><small class="hint">Facoltativo: inserisci la misura verificata dal disegno.</small></div>
+              <div class="form-group"><label for="diametroSfera">Diametro Sfera [mm]</label><input type="number" step="any" id="diametroSfera" /></div>
+              <div class="form-group"><label for="numeroSfere">Numero Sfere</label><input type="number" id="numeroSfere" /></div>
+            </div>
+
+            <h3 class="section-divider">Assemblaggio</h3>
+            <div class="form-grid">
+              <div class="form-group"><label for="gabbiaTipo">Tipo Gabbia</label><input type="text" id="gabbiaTipo" /></div>
+              <div class="form-group"><label for="grassoTipo">Tipo Grasso</label><input type="text" id="grassoTipo" /></div>
+              <div class="form-group"><label for="schermoTipo">Schermi / Tenute</label><input type="text" id="schermoTipo" /></div>
+            </div>
+
+            <h3 class="section-divider">Parametri di Qualità</h3>
+            <div class="form-grid">
+              <div class="form-group"><label for="pesoMin">Peso minimo [g]</label><input type="number" step="any" id="pesoMin" /></div>
+              <div class="form-group"><label for="pesoMax">Peso massimo [g]</label><input type="number" step="any" id="pesoMax" /></div>
+              <div class="form-group"><label for="serieGioco">Riferimento SKF del gioco radiale</label>
+                <select id="serieGioco">
+                  <option value="storica">Tabella precedente (classi speciali)</option>
+                  <option value="BCG02">SKF BCG02 · normale / diviso (fino a 7 mm)</option>
+                  <option value="BCG04">SKF BCG04 · normale / diviso</option>
+                  <option value="BCG06">SKF BCG06 · normale / diviso</option>
+                </select>
+              </div>
+              <div class="form-group"><label for="classeGioco">Classe di gioco radiale</label><select id="classeGioco"><option value="">Seleziona...</option></select></div>
+              <div class="form-group"><label for="giocoMin">Gioco min [µm]</label><input type="number" step="any" id="giocoMin" /></div>
+              <div class="form-group"><label for="giocoMax">Gioco max [µm]</label><input type="number" step="any" id="giocoMax" /></div>
+            </div>
+            <p id="gioco-avviso" class="quality-warning" role="status">Seleziona riferimento BCG, diametro IR e classe. Le classi C2L–C3H sono tratte dalla tabella SKF divisa, stampata il 04/01/2021.</p>
+
+            <h3 class="section-divider">Disegno Tecnico</h3>
+            <div class="form-grid">
+              <div class="form-group full drawing-section">
+                <label for="disegnoUrl">URL disegno / foto scheda</label>
+                <div class="drawing-controls">
+                  <input type="url" id="disegnoUrl" placeholder="Incolla link Google Drive o URL immagine" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                  <button type="button" id="btn-file-galleria" class="btn btn-light">🖼️ Scegli dalla galleria</button>
+                  <input type="file" id="file-galleria" accept="image/*" style="display:none" />
+                  <button type="button" id="btn-file-camera" class="btn btn-light">📷 Scatta foto</button>
+                  <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" />
+                  <button type="button" id="btn-analizza-ia" class="btn btn-secondary is-hidden">🤖 Estrai dati dalla scheda</button>
+                  <button type="button" id="btn-cloud-settings" class="btn btn-light">☁️ Configura archivio foto</button>
+                </div>
+                <small class="hint">Il caricamento automatico richiede il tuo archivio Cloudflare configurato; i link Google Drive possono non essere incorporabili.</small>
+                <p id="cloud-status" class="cloud-status" role="status">Foto temporanea finché non colleghi l'archivio cloud.</p>
+                <div class="drawing-preview" style="position: relative;">
+                  <img id="drawing-image" src="" alt="Anteprima disegno" referrerpolicy="no-referrer" style="display:none;" />
+                  <div id="drawing-placeholder">Nessun disegno caricato</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" id="btn-reset" class="btn btn-light">Svuota campi</button>
+              <button type="button" id="btn-elimina" class="btn btn-danger" disabled>🗑️ Elimina</button>
+              <button type="submit" class="btn btn-primary save-btn">💾 Salva</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="scheda-modal" class="modal is-hidden" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h2 id="scheda-codice">Scheda tecnica</h2>
+          <p id="scheda-sub" class="sub"></p>
+        </div>
+        <div class="modal-header-actions">
+          <button id="scheda-edit" class="btn btn-secondary" type="button">✏️ Modifica</button>
+          <button id="scheda-duplica" class="btn btn-light" type="button">⧉ Duplica</button>
+          <button id="scheda-save-pdf" class="btn btn-primary" type="button">💾 Salva PDF</button>
+          <button id="scheda-close" class="btn-icon" type="button">✖</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <section class="scheda-section">
+          <h3>Dati principali</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">IR - Tipo</span><span id="scheda-ir" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">OR - Tipo</span><span id="scheda-or" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Diametro foro IR</span><span id="scheda-ir-diametro" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Diametro esterno OR</span><span id="scheda-or-diametro" class="value">Non registrato</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Rotolamento</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">Sfere</span><span id="scheda-sfere" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Gabbia</span><span id="scheda-gabbia" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Lubrificazione & schermatura</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">Grasso</span><span id="scheda-grasso" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Schermo / Tenuta</span><span id="scheda-schermo" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Peso & gioco radiale</h3>
+          <div class="scheda-grid">
+            <div class="scheda-item"><span class="label">Peso</span><span id="scheda-peso" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Gioco radiale</span><span id="scheda-gioco" class="value">-</span></div>
+          </div>
+        </section>
+        <section class="scheda-section">
+          <h3>Disegno tecnico</h3>
+          <div class="scheda-drawing-box">
+            <img id="scheda-drawing-image" alt="Disegno tecnico" referrerpolicy="no-referrer" />
+            <div id="scheda-drawing-placeholder" class="placeholder">Nessun disegno caricato</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="image-zoom-modal" class="zoom-modal is-hidden">
+    <button id="btn-close-zoom" class="btn-close-zoom" type="button">❌ Chiudi</button>
+    <div class="zoom-container"><img id="zoomed-image" src="" alt="Zoom Disegno" /></div>
+  </div>
+
+  <script type="module" src="./js/main.js?v=v10.2-diametri"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>

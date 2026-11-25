@@ -1,13 +1,13 @@
 {
   "name": "Ricette Lavorazione Cuscinetti",
   "short_name": "Ricette RC",
-  "description": "App per ricette di lavorazione cuscinetti, componenti, disegni tecnici e gioco radiale",
+  "description": "Catalogo ricette Cloudflare, disegni tecnici privati e gioco radiale",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#071121",
-  "theme_color": "#2563eb",
+  "background_color": "#edf3f8",
+  "theme_color": "#102a45",
   "icons": [
     {
       "src": "./icon-192.png",
