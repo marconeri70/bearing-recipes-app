@@ -33,6 +33,7 @@ async function loadRemote(){
  throw Error("Archivio troppo grande per questa procedura.");
 }
 function syncControls(){
+ $("catalog-list").hidden=!!sheetCode;$("sheet-screen").hidden=!sheetCode;
  $("login-fields").hidden=connected;$("connected-bar").hidden=!connected;
  $("cloud-catalog").hidden=!connected||activeView!=="catalog"||!!draft;
  $("backup-panel").hidden=activeView!=="backup";
@@ -45,7 +46,7 @@ function syncControls(){
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
 }
 function button(text,fn,blocked=false){const b=element("button",text);b.type="button";b.dataset.action="1";b.dataset.blocked=String(blocked);b.onclick=fn;return b;}
-function photoClear(){if(viewUrl)URL.revokeObjectURL(viewUrl);viewUrl=null;$("photo-view").replaceChildren();}
+function photoClear(){closeZoom();if(viewUrl)URL.revokeObjectURL(viewUrl);viewUrl=null;$("photo-view").replaceChildren();}
 function render(){
  $("remote-count").textContent=connected?remote.filter(r=>!r.deleted).length:"—";
  const localList=$("locals"),remoteList=$("remotes");localList.replaceChildren();remoteList.replaceChildren();
@@ -70,36 +71,94 @@ function render(){
 function renderCloudCatalog(){
  const remoteList=$("remotes");remoteList.replaceChildren();
  const query=$("cloud-search").value.trim().toLowerCase(), ir=$("cloud-ir").value.trim(), or=$("cloud-or").value.trim();
- const rows=remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or));
+ const classSelect=$("cloud-class"),selected=classSelect.value;
+ const classes=[...new Set(remote.filter(x=>!x.deleted).map(x=>String(x.recipe?.classeGioco||"").trim().toUpperCase()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"it",{numeric:true}));
+ classSelect.replaceChildren();for(const value of ["",...classes]){const opt=element("option",value||"Tutte le classi");opt.value=value;classSelect.append(opt);}
+ classSelect.value=classes.includes(selected)?selected:"";
+ const rows=remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or)&&(!classSelect.value||String(row.recipe?.classeGioco||"").trim().toUpperCase()===classSelect.value));
  $("cloud-filter-count").textContent=connected?rows.length+" ricette trovate":"Collega l’archivio per visualizzare le ricette.";
  for(const row of rows){
   const r=row.recipe||{},box=element("article",null,"recipe-row"),info=element("div",null,"recipe-info");
   info.append(element("strong",r.codice||row.code),element("small","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm"),element("small",r.classeGioco?"Gioco "+r.classeGioco+": "+(r.giocoMin??"—")+" – "+(r.giocoMax??"—")+" µm":"Gioco non registrato"));
   if(keyPattern.test(r.disegnoR2Key||""))info.append(element("span","Disegno R2","tag"));else if(r.disegnoUrl)info.append(element("span","Link esterno","tag"));
-  info.append(element("span","V"+row.revision,"tag"));box.append(info,button("Apri",()=>openSheet(row)));
+  info.append(element("span","V"+row.revision,"tag"));
+  if($("show-thumbs").checked&&keyPattern.test(r.disegnoR2Key||"")){const thumb=element("img",null,"recipe-thumb");thumb.alt="";thumb.loading="lazy";box.append(thumb);queueThumb(thumb,r.disegnoR2Key);}
+  box.append(info,button("Apri",()=>openSheet(row)));
   box.addEventListener("click",e=>{if(!e.target.closest("button")&&!busy)openSheet(row);});remoteList.append(box);
  }
  if(connected&&!rows.length)remoteList.append(element("p","Nessuna ricetta corrispondente."));
- if(sheetCode){const row=remote.find(x=>x.code===sheetCode&&!x.deleted);if(row)renderSheet(row);else clearSheet();}
+ if(sheetCode&&!remote.some(x=>x.code===sheetCode&&!x.deleted))clearSheet();
  syncControls();
+}
+
+
+const photoCache=new Map(), photoPending=new Map(), photoQueue=[];
+let photoEpoch=0, thumbActive=0, zoom=1;
+function resetPhotoCache(){photoEpoch++;for(const url of photoCache.values())URL.revokeObjectURL(url);photoCache.clear();photoPending.clear();photoQueue.length=0;}
+async function photoURL(key){
+ if(!connected||!keyPattern.test(key))throw Error("Disegno non disponibile.");
+ if(photoCache.has(key))return photoCache.get(key);
+ if(photoPending.has(key))return photoPending.get(key);
+ const epoch=photoEpoch;
+ const promise=(async()=>{const res=await request("/api/photos?key="+encodeURIComponent(key));const blob=await res.blob();
+ if(!connected||epoch!==photoEpoch)throw Error("Sessione terminata.");
+ if(!/^image\/(jpeg|png|webp)$/.test(blob.type)||!blob.size||blob.size>8*1024*1024)throw Error("Foto non valida.");
+ const url=URL.createObjectURL(blob);if(photoCache.size>=24){const [old,value]=photoCache.entries().next().value;photoCache.delete(old);URL.revokeObjectURL(value);}
+ photoCache.set(key,url);return url;})();
+ photoPending.set(key,promise);try{return await promise;}finally{if(photoPending.get(key)===promise)photoPending.delete(key);}
+}
+function queueThumb(img,key){photoQueue.push({img,key,epoch:photoEpoch});queueMicrotask(drainThumbs);}
+function drainThumbs(){
+ while(thumbActive<2&&photoQueue.length){
+  const task=photoQueue.shift();if(!task.img.isConnected||!connected||task.epoch!==photoEpoch)continue;
+  thumbActive++;photoURL(task.key).then(url=>{if(task.img.isConnected&&task.epoch===photoEpoch)task.img.src=url;}).catch(()=>{task.img.hidden=true;}).finally(()=>{thumbActive--;drainThumbs();});
+ }
+}
+function closeZoom(){const d=$("zoom-dialog");if(d.open)d.close();$("zoom-image").removeAttribute("src");}
+function setZoom(value){zoom=Math.max(1,Math.min(4,value));$("zoom-image").style.width=(zoom*100)+"%";$("zoom-level").textContent=Math.round(zoom*100)+"%";}
+function openZoom(url){if(!connected||!url)return;$("zoom-image").src=url;setZoom(1);$("zoom-dialog").showModal();$("zoom-scroll").scrollTo(0,0);}
+$("zoom-minus").onclick=()=>setZoom(zoom-.5);$("zoom-plus").onclick=()=>setZoom(zoom+.5);$("zoom-close").onclick=closeZoom;
+$("zoom-dialog").addEventListener("close",()=>{$("zoom-image").removeAttribute("src");});
+async function attachSheetPhoto(row){
+ const key=row.recipe?.disegnoR2Key;if(!keyPattern.test(key||""))return;
+ const target=$("sheet-drawing");if(!target)return;
+ try{const url=await photoURL(key);if(sheetCode!==row.code||!target.isConnected)return;
+ const image=element("img");image.alt="Disegno "+row.recipe.codice;image.src=url;image.onclick=()=>openZoom(url);
+ const zoomButton=element("button","Ingrandisci disegno");zoomButton.type="button";zoomButton.className="secondary";zoomButton.onclick=()=>openZoom(url);
+ target.replaceChildren(image,zoomButton);
+ }catch(e){if(target.isConnected)target.textContent="Disegno non disponibile: "+e.message;}
+}
+async function printSheet(row){
+ if(!connected||busy||sheetCode!==row.code)return;
+ await action(async()=>{
+  const target=$("sheet-drawing");
+  if(keyPattern.test(row.recipe?.disegnoR2Key||"")){
+   if(!target?.querySelector("img"))await attachSheetPhoto(row);
+   const img=target?.querySelector("img");if(!img)throw Error("Impossibile caricare il disegno per la stampa.");
+   await img.decode();
+  }
+  if(!confirm("Stampare o salvare la scheda PDF? Conserva il documento in un luogo aziendale autorizzato."))return;
+  document.body.classList.add("print-sheet");try{window.print();}finally{document.body.classList.remove("print-sheet");}
+ });
 }
 
 function clearSheet(){sheetCode=null;$("recipe-sheet").replaceChildren();photoClear();$("cloud-history").replaceChildren();}
 function renderSheet(row){
  const panel=$("recipe-sheet"),r=row.recipe||{};panel.replaceChildren();
- const box=element("article"),top=element("div",null,"catalog-title"),close=element("button","Chiudi");close.className="secondary";close.onclick=clearSheet;
+ const box=element("article"),top=element("div",null,"catalog-title"),close=element("button","Chiudi");close.className="secondary";close.onclick=()=>{clearSheet();syncControls();window.scrollTo({top:0,behavior:"instant"});};
  top.append(element("h2",r.codice||row.code),close);box.append(top,element("small","Scheda tecnica · versione "+row.revision));
+ const printNote=element("p","Copia della ricetta registrata. Verificare specifica di produzione e revisione approvata.");printNote.id="print-note";box.append(printNote);
  const grid=element("div",null,"grid");
  for(const k of fields.filter(x=>x!=="codice")){
   const item=element("div",null,"metric");item.append(element("small",fieldLabels[k]||k),element("b",String(r[k]??"—")));grid.append(item);
  }
  box.append(grid);
- if(keyPattern.test(r.disegnoR2Key||""))box.append(button("Apri foto privata",()=>showPhoto(r)));
+ if(keyPattern.test(r.disegnoR2Key||"")){const drawing=element("div","Caricamento disegno privato…");drawing.id="sheet-drawing";box.append(drawing);}
  else box.append(element("small",r.disegnoUrl?"Disegno collegato esternamente; seleziona l’originale nella modifica per archiviarlo su R2.":"Nessun disegno associato."));
- box.append(button("Modifica ricetta / foto",()=>openEditor(row)),button("Storico",()=>showHistory(row)));
- panel.append(box);
+ box.append(button("Modifica ricetta / foto",()=>openEditor(row)),button("Storico",()=>showHistory(row)),button("Stampa / PDF",()=>printSheet(row)));
+ panel.append(box);attachSheetPhoto(row);
 }
-function openSheet(row){if(!connected||busy)return;clearSheet();sheetCode=row.code;renderSheet(row);syncControls();$("recipe-sheet").scrollIntoView({block:"start"});}
+function openSheet(row){if(!connected||busy)return;clearSheet();sheetCode=row.code;renderSheet(row);syncControls();window.scrollTo({top:0,behavior:"instant"});}
 function navigate(view){
  if(busy)return;
  if(draft){if(!confirm("Abbandonare la scheda non salvata?"))return;closeEditor();}
@@ -141,7 +200,7 @@ $("login").onclick=()=>action(async()=>{
  if(token.length<32||token.length>128){token="";throw Error("Inserisci la chiave amministratore creata su GitHub, non il token Cloudflare.");}
  try{const check=await json("/api/check");if(!check.database||!check.photos)throw Error("Verifica archivi non riuscita.");await loadRemote();connected=true;activeView="catalog";render();status("Catalogo aggiornato. Le ricette cloud sono disponibili.");}catch(e){token="";connected=false;remote=[];render();throw e;}
 });
-$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];activeView="catalog";clearSheet();render();status("Disconnesso.");};
+$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";clearSheet();render();status("Disconnesso.");};
 $("refresh").onclick=()=>action(async()=>{await loadRemote();render();status("Archivio aggiornato.");});
 function toData(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
 $("cloud-backup").onclick=()=>action(async()=>{
@@ -295,14 +354,15 @@ async function saveEditor(event){
  });
 }
 $("new-cloud").onclick=()=>openEditor();
-for(const id of ["cloud-search","cloud-ir","cloud-or"])$(id).addEventListener("input",renderCloudCatalog);
+$("key").addEventListener("keydown",e=>{if(e.key==="Enter"&&!busy&&!connected){e.preventDefault();$("login").click();}});
+for(const id of ["cloud-search","cloud-ir","cloud-or","cloud-class","show-thumbs"])$(id).addEventListener("input",renderCloudCatalog);
 $("editor-file").onchange=e=>chooseEditorFile(e.target.files[0]);
 $("editor-capture").onchange=e=>chooseEditorFile(e.target.files[0]);
 $("editor-camera").onclick=()=>$("editor-capture").click();
 $("editor-cancel").onclick=()=>{if(!busy&&confirm("Chiudere senza salvare?")){closeEditor();render();$("cloud-catalog").scrollIntoView({block:"start"});}};
 $("editor-form").onsubmit=saveEditor;
 
-window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];activeView="catalog";closeEditor();clearSheet();render();status("Sessione terminata. Accedi di nuovo.");});
+window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";closeEditor();clearSheet();render();status("Sessione terminata. Accedi di nuovo.");});
 window.addEventListener("pageshow",e=>{if(e.persisted){busy=false;syncControls();}});
 let refreshedAt=0;
 async function refreshVisible(){
