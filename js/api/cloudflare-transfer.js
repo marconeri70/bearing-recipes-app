@@ -42,6 +42,7 @@ function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
  $("editor-cancel").disabled=busy;
+ $("restore-file").disabled=busy||!connected;$("restore-preview").disabled=busy||!connected||!$("restore-file").files.length;$("restore-run").disabled=busy||!connected||!restorePlan?.length;$("restore-clear").disabled=busy;
  $("skf-apply").disabled=busy||!skfProposal||!draft;
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
 }
@@ -233,7 +234,7 @@ $("login").onclick=()=>action(async()=>{
  if(token.length<32||token.length>128){token="";throw Error("Inserisci la chiave amministratore creata su GitHub, non il token Cloudflare.");}
  try{const check=await json("/api/check");if(!check.database||!check.photos)throw Error("Verifica archivi non riuscita.");await loadRemote();connected=true;activeView="catalog";render();status("Catalogo aggiornato. Le ricette cloud sono disponibili.");}catch(e){token="";connected=false;remote=[];render();throw e;}
 });
-$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";clearSheet();render();status("Disconnesso.");};
+$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";clearSheet();clearRestore();render();status("Disconnesso.");};
 $("refresh").onclick=()=>action(async()=>{await loadRemote();render();status("Archivio aggiornato.");});
 function toData(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
 $("cloud-backup").onclick=()=>action(async()=>{
@@ -386,6 +387,99 @@ async function saveEditor(event){
   }catch(e){$("editor-status").textContent=e.message;throw e;}finally{$("editor-form").inert=false;}
  });
 }
+
+let restorePlan=null;
+const RESTORE_LIMIT=75*1024*1024;
+function clearRestore(){
+ restorePlan=null;$("restore-file").value="";$("restore-result").replaceChildren();syncControls();
+}
+function validateBackupRecipe(row,photos){
+ if(!row||typeof row!=="object"||row.deleted!==false||!Number.isSafeInteger(row.revision)||row.revision<1)throw Error("Versione non valida o archiviata.");
+ const src=row.recipe;if(!src||typeof src!=="object"||Array.isArray(src)||typeof src.codice!=="string"||!src.codice.trim()||src.codice.length>200||row.code!==code(src))throw Error("Codice ricetta non valido.");
+ const recipe={};
+ for(const k of fields){
+  const v=src[k];if(v==null||v==="")continue;
+  if(numericFields.has(k)){if(typeof v!=="number"||!Number.isFinite(v)||v<0)throw Error("Valore numerico non valido: "+k);recipe[k]=v;}
+  else{if(typeof v!=="string"||v.length>4000)throw Error("Campo non valido: "+k);recipe[k]=v;}
+ }
+ recipe.codice=recipe.codice.trim();
+ for(const [lo,hi] of [["giocoMin","giocoMax"],["pesoMin","pesoMax"]])if(recipe[lo]!=null&&recipe[hi]!=null&&recipe[lo]>recipe[hi])throw Error("Intervallo non valido.");
+ let photo=null;
+ if(src.disegnoR2Key){
+  const k=src.disegnoR2Key;if(typeof k!=="string"||!keyPattern.test(k)||!Object.prototype.hasOwnProperty.call(photos,k))throw Error("Foto R2 mancante nel backup.");
+  const data=photos[k];if(typeof data!=="string")throw Error("Foto non valida.");
+  const match=data.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  if(!match||match[2].length>Math.ceil(8*1024*1024/3)*4)throw Error("Formato o dimensione foto non valido.");
+  let bytes;try{bytes=Uint8Array.from(atob(match[2]),c=>c.charCodeAt(0));}catch{throw Error("Foto base64 non valida.");}
+  if(!bytes.length||bytes.length>8*1024*1024)throw Error("Foto oltre il limite di 8 MB.");
+  const type=match[1];
+  const valid=type==="image/jpeg"?bytes.length>3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255:type==="image/png"?bytes.length>8&&[137,80,78,71,13,10,26,10].every((v,i)=>bytes[i]===v):bytes.length>12&&String.fromCharCode(...bytes.slice(0,4))==="RIFF"&&String.fromCharCode(...bytes.slice(8,12))==="WEBP";
+  if(!valid)throw Error("Contenuto foto non valido.");
+  photo=new Blob([bytes],{type});
+ }else if(src.disegnoUrl){
+  if(typeof src.disegnoUrl!=="string"||src.disegnoUrl.length>4000||!/^https:\/\//i.test(src.disegnoUrl)||new URL(src.disegnoUrl).protocol!=="https:")throw Error("Link immagine non valido.");
+  recipe.disegnoUrl=src.disegnoUrl;
+ }
+ return {recipe,photo};
+}
+function analyzeBackup(data,existing){
+ if(!data||data.formato!=="bearing-recipes-cloudflare-backup"||data.versione!==11||!Array.isArray(data.ricette)||!data.foto||typeof data.foto!=="object"||Array.isArray(data.foto)||data.ricette.length>2000)throw Error("Formato non supportato. Usa un backup cloud JSON esportato dall’app (massimo 2000 ricette).");
+ const seen=new Set(),duplicates=new Set(),plan=[],skipped=[],invalid=[];
+ for(const row of data.ricette){const k=code(row?.recipe);if(k&&seen.has(k))duplicates.add(k);seen.add(k);}
+ for(const row of data.ricette){
+  const k=code(row?.recipe),label=typeof row?.recipe?.codice==="string"?row.recipe.codice.slice(0,200):"Senza codice";
+  if(duplicates.has(k)){invalid.push(label+": codice duplicato nel file");continue;}
+  if(existing.has(k)){skipped.push(label);continue;}
+  try{plan.push(validateBackupRecipe(row,data.foto));}catch(e){invalid.push(label+": "+e.message);}
+ }
+ return {plan,skipped,invalid};
+}
+$("restore-file").onchange=()=>{restorePlan=null;$("restore-result").replaceChildren();syncControls();};
+$("restore-clear").onclick=()=>{if(!busy)clearRestore();};
+$("restore-preview").onclick=()=>action(async()=>{
+ restorePlan=null;const file=$("restore-file").files[0],out=$("restore-result");out.replaceChildren();
+ try{
+  if(!file||file.size>RESTORE_LIMIT)throw Error("Seleziona un file JSON fino a 75 MB.");
+  let data;try{data=JSON.parse(await file.text());}catch{throw Error("Il file non è un JSON valido.");}
+  await loadRemote();
+  const result=analyzeBackup(data,new Set(remote.map(x=>x.code)));
+  restorePlan=result.plan;
+  out.append(element("strong",result.plan.length+" recuperabili · "+result.skipped.length+" già presenti · "+result.invalid.length+" non valide"));
+  if(result.plan.length){const list=element("ul");for(const item of result.plan.slice(0,100))list.append(element("li",item.recipe.codice+(item.photo?" · con foto R2":item.recipe.disegnoUrl?" · solo link esterno":" · senza disegno")));out.append(list);if(result.plan.length>100)out.append(element("p","Mostrati i primi 100 codici recuperabili."));}
+  if(result.invalid.length){const list=element("ul");for(const item of result.invalid.slice(0,50))list.append(element("li",item));out.append(element("strong","Record esclusi"),list);}
+  out.append(element("p","Nessuna modifica effettuata. I codici esistenti, anche archiviati, restano intatti."));
+  status("Analisi del backup completata.");
+ }catch(e){out.textContent=e.message;throw e;}
+});
+$("restore-run").onclick=()=>{
+ if(!connected||busy||!restorePlan?.length)return;
+ if(!confirm("Recuperare fino a "+restorePlan.length+" ricette mancanti su Cloudflare? Conferma solo se autorizzato dall'azienda. Nessuna ricetta esistente verrà sovrascritta."))return;
+ const plan=restorePlan;restorePlan=null;
+ action(async()=>{
+  const out=$("restore-result");const reports=[];let ok=0,skipped=0,failed=0;
+  try{
+   await loadRemote();
+   const existing=new Set(remote.map(x=>x.code));
+   for(const item of plan){
+    if(!connected||!token)throw Error("Sessione terminata. Operazione interrotta.");
+    const recipe={...item.recipe},k=code(recipe);
+    if(existing.has(k)){skipped++;reports.push(recipe.codice+": già presente");continue;}
+    out.textContent="Recupero in corso: "+recipe.codice+" ("+(ok+skipped+failed+1)+"/"+plan.length+")";
+    try{
+     if(item.photo)recipe.disegnoR2Key=await upload(item.photo);
+     const saved=await json("/api/recipes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipe,expectedRevision:0,deleted:false})});
+     if(saved.code!==k||saved.revision!==1||saved.deleted!==false)throw Error("Salvataggio non verificato.");
+     existing.add(k);ok++;reports.push(recipe.codice+": salvata");
+    }catch(e){failed++;reports.push(recipe.codice+": "+e.message+" (verificare prima di riprovare)");}
+   }
+   await loadRemote();const checked=new Set(remote.filter(x=>!x.deleted).map(x=>x.code));
+   const confirmed=plan.filter(x=>checked.has(code(x.recipe))).length;
+   render();status("Recupero completato. "+ok+" nuovi salvataggi confermati dall’API; "+skipped+" saltati; "+failed+" errori.");
+   out.textContent=ok+" nuovi salvataggi · "+skipped+" saltati · "+failed+" errori. "+confirmed+" dei codici analizzati risultano attivi dopo la rilettura.\n"+reports.join("\n");
+  }catch(e){out.textContent="Recupero interrotto: "+e.message+"\n"+reports.join("\n")+"\nAggiorna il catalogo prima di riprovare.";throw e;}
+ });
+};
+
 $("new-cloud").onclick=()=>openEditor();
 $("key").addEventListener("keydown",e=>{if(e.key==="Enter"&&!busy&&!connected){e.preventDefault();$("login").click();}});
 for(const id of ["cloud-search","cloud-ir","cloud-or","cloud-class","show-thumbs"])$(id).addEventListener("input",renderCloudCatalog);
@@ -395,7 +489,7 @@ $("editor-camera").onclick=()=>$("editor-capture").click();
 $("editor-cancel").onclick=()=>{if(!busy&&confirm("Chiudere senza salvare?")){closeEditor();render();$("cloud-catalog").scrollIntoView({block:"start"});}};
 $("editor-form").onsubmit=saveEditor;
 
-window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";closeEditor();clearSheet();render();status("Sessione terminata. Accedi di nuovo.");});
+window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];resetPhotoCache();activeView="catalog";closeEditor();clearSheet();clearRestore();render();status("Sessione terminata. Accedi di nuovo.");});
 window.addEventListener("pageshow",e=>{if(e.persisted){busy=false;syncControls();}});
 let refreshedAt=0;
 async function refreshVisible(){
