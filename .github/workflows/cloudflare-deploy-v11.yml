@@ -21,8 +21,19 @@ jobs:
           import os, json, urllib.request, urllib.error, pathlib, secrets, re, time
           token = os.environ.get("CF_TOKEN","")
           admin = os.environ.get("RECIPES_ADMIN_TOKEN","")
-          if not token or len(admin) < 32 or len(admin) > 128 or not re.fullmatch(r"[A-Za-z0-9_-]+",admin) or admin == token:
-              raise SystemExit("Configura SKF_RECIPES_ADMIN_TOKEN con una chiave casuale distinta da quella Cloudflare, 32-128 caratteri (lettere, numeri, - e _).")
+          if not token:
+              raise SystemExit("CLOUDFLARE_API_TOKEN assente.")
+          if not admin:
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN assente.")
+          if len(admin) < 32:
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN troppo corto: minimo 32 caratteri.")
+          if len(admin) > 128:
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN troppo lungo: massimo 128 caratteri.")
+          if not all(33 <= ord(c) <= 126 for c in admin):
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN contiene spazi, caratteri di controllo o caratteri non ASCII. Usa una chiave casuale senza spazi.")
+          if admin == token:
+              raise SystemExit("Le due chiavi devono essere differenti.")
+          print("Controllo dei segreti superato.")
           name = "skf-ricette-api"
           bucket = "skf-ricette-foto"
           def api(path, method="GET", payload=None, eu=False, multipart=None):
