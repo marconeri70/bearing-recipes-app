@@ -1,0 +1,12 @@
+name = "bearing-recipes-cloud"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://marconeri70.github.io"
+
+[[r2_buckets]]
+binding = "BEARING_IMAGES"
+bucket_name = "bearing-recipes-images"
+# Imposta con wrangler secret put UPLOAD_TOKEN
+# Imposta con wrangler secret put GEMINI_API_KEY

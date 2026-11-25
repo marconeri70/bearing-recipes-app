@@ -32,6 +32,10 @@
         <button id="btn-export-csv" class="btn btn-light" type="button">⬇️ Esporta CSV</button>
         <button id="btn-import" class="btn btn-light" type="button">⬆️ Importa CSV</button>
         <input type="file" id="file-import" accept=".csv,text/csv" style="display:none" />
+        <button id="btn-backup-json" class="btn btn-light" type="button">💾 Backup JSON</button>
+        <button id="btn-import-json" class="btn btn-light" type="button">📂 Importa JSON</button>
+        <input type="file" id="file-import-json" accept=".json,application/json" style="display:none" />
+        <button id="btn-recupera-archivi" class="btn btn-light" type="button">↩️ Recupera vecchie ricette</button>
       </div>
     </header>
 
@@ -48,7 +52,7 @@
           </select>
         </div>
         <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
-        <p class="note">Le immagini da URL Google Drive vengono trasformate in anteprima diretta. Per molte ricette usa preferibilmente URL, non foto interne.</p>
+        <p class="note">Le ricette sono salvate su questo dispositivo. Fai un backup JSON prima di cancellare dati o reinstallare: il cloud riguarda le foto, non ancora l'intero archivio.</p>
       </section>
 
       <section class="form-section">
@@ -86,10 +90,19 @@
             <div class="form-grid">
               <div class="form-group"><label for="pesoMin">Peso minimo [g]</label><input type="number" step="any" id="pesoMin" /></div>
               <div class="form-group"><label for="pesoMax">Peso massimo [g]</label><input type="number" step="any" id="pesoMax" /></div>
+              <div class="form-group"><label for="serieGioco">Riferimento SKF del gioco radiale</label>
+                <select id="serieGioco">
+                  <option value="storica">Tabella precedente (classi speciali)</option>
+                  <option value="BCG02">SKF BCG02 · normale / diviso (fino a 7 mm)</option>
+                  <option value="BCG04">SKF BCG04 · normale / diviso</option>
+                  <option value="BCG06">SKF BCG06 · normale / diviso</option>
+                </select>
+              </div>
               <div class="form-group"><label for="classeGioco">Classe di gioco radiale</label><select id="classeGioco"><option value="">Seleziona...</option></select></div>
               <div class="form-group"><label for="giocoMin">Gioco min [µm]</label><input type="number" step="any" id="giocoMin" /></div>
               <div class="form-group"><label for="giocoMax">Gioco max [µm]</label><input type="number" step="any" id="giocoMax" /></div>
             </div>
+            <p id="gioco-avviso" class="quality-warning" role="status">Seleziona riferimento BCG, diametro IR e classe. Le classi C2L–C3H sono tratte dalla tabella SKF divisa, stampata il 04/01/2021.</p>
 
             <h3 class="section-divider">Disegno Tecnico</h3>
             <div class="form-grid">
@@ -102,8 +115,10 @@
                   <button type="button" id="btn-file-camera" class="btn btn-light">📷 Scatta foto</button>
                   <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" />
                   <button type="button" id="btn-analizza-ia" class="btn btn-secondary is-hidden">🤖 Estrai dati dalla scheda</button>
+                  <button type="button" id="btn-cloud-settings" class="btn btn-light">☁️ Configura archivio foto</button>
                 </div>
-                <small class="hint">Esempio Drive accettato: https://drive.google.com/file/d/ID/view. L'app lo trasforma in anteprima thumbnail.</small>
+                <small class="hint">Il caricamento automatico richiede il tuo archivio Cloudflare configurato; i link Google Drive possono non essere incorporabili.</small>
+                <p id="cloud-status" class="cloud-status" role="status">Foto temporanea finché non colleghi l'archivio cloud.</p>
                 <div class="drawing-preview" style="position: relative;">
                   <img id="drawing-image" src="" alt="Anteprima disegno" referrerpolicy="no-referrer" style="display:none;" />
                   <div id="drawing-placeholder">Nessun disegno caricato</div>
@@ -131,6 +146,8 @@
           <p id="scheda-sub" class="sub"></p>
         </div>
         <div class="modal-header-actions">
+          <button id="scheda-edit" class="btn btn-secondary" type="button">✏️ Modifica</button>
+          <button id="scheda-duplica" class="btn btn-light" type="button">⧉ Duplica</button>
           <button id="scheda-save-pdf" class="btn btn-primary" type="button">💾 Salva PDF</button>
           <button id="scheda-close" class="btn-icon" type="button">✖</button>
         </div>
