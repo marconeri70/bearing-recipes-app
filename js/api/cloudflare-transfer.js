@@ -36,6 +36,7 @@ function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
  $("editor-cancel").disabled=busy;
+ $("skf-apply").disabled=busy||!skfProposal||!draft;
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
 }
 function button(text,fn,blocked=false){const b=element("button",text);b.type="button";b.dataset.action="1";b.dataset.blocked=String(blocked);b.onclick=fn;return b;}
@@ -70,7 +71,7 @@ function renderCloudCatalog(){
   const r=row.recipe||{},box=element("article");box.append(element("strong",r.codice||row.code),element("small","Versione "+row.revision+(row.deleted?" · eliminata":" · attiva")),element("p","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm · "+(r.classeGioco||"—")));
   if(keyPattern.test(r.disegnoR2Key||""))box.append(button("Apri foto privata",()=>showPhoto(r)));
   else box.append(element("small",r.disegnoUrl?"Solo collegamento esterno: foto non archiviata in R2.":"Nessun disegno R2."));
-  box.append(button("Modifica ricetta / foto",()=>openEditor(row)));
+  box.append(button("Modifica ricetta / foto",()=>openEditor(row)),button("Storico",()=>showHistory(row)));
   const detail=element("details"),summary=element("summary","Dati tecnici");detail.append(summary);
   for(const [k,v] of Object.entries(r)){if(k==="disegnoUrl"||k==="disegnoR2Key")continue;detail.append(element("p",k+": "+String(v)));}
   box.append(detail);remoteList.append(box);
@@ -111,7 +112,7 @@ $("login").onclick=()=>action(async()=>{
  if(token.length<32||token.length>128){token="";throw Error("Inserisci la chiave amministratore creata su GitHub, non il token Cloudflare.");}
  try{const check=await json("/api/check");if(!check.database||!check.photos)throw Error("Verifica archivi non riuscita.");await loadRemote();connected=true;render();status("Archivio Cloudflare collegato. Nessuna ricetta modificata.");}catch(e){token="";connected=false;remote=[];render();throw e;}
 });
-$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];photoClear();render();status("Disconnesso.");};
+$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];$("cloud-history").replaceChildren();photoClear();render();status("Disconnesso.");};
 $("refresh").onclick=()=>action(async()=>{await loadRemote();render();status("Archivio aggiornato.");});
 function toData(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
 $("cloud-backup").onclick=()=>action(async()=>{
@@ -139,6 +140,70 @@ function matchesCloud(r,q,ir,or){
  const has=(k,v)=>!v||(numberValue(v)!==null&&numberValue(v)>0&&numberValue(r[k])===numberValue(v));
  return (!q||[r.codice,r.irTipo,r.orTipo,r.classeGioco].some(v=>String(v??"").toLowerCase().includes(q)))&&has("irDiametro",ir)&&has("orDiametro",or);
 }
+
+let skfRows=[],skfReady=false,skfProposal=null;
+function parseSKF(raw,kind){
+ const lines=raw.replace(/^\uFEFF/,"").split(/\r?\n/).filter(l=>l.trim());
+ const cols=lines.shift().split(";").map(v=>v.trim()),idx=k=>cols.indexOf(k);
+ if(["d_min","d_max","classe","gioco_min","gioco_max"].some(k=>idx(k)<0)||kind!=="storica"&&idx("serie")<0)throw Error("Tabella SKF non riconosciuta.");
+ return lines.map(l=>{
+  const row=l.split(";"), get=k=>(row[idx(k)]??"").trim();
+  return {serie:kind==="storica"?"storica":get("serie"),classe:get("classe").toUpperCase(),lo:numberValue(get("d_min")),hi:numberValue(get("d_max")),min:numberValue(get("gioco_min")),max:numberValue(get("gioco_max")),kind};
+ }).filter(x=>x.classe&&["storica","BCG02","BCG04","BCG06"].includes(x.serie)&&[x.lo,x.hi,x.min,x.max].every(n=>n!==null)&&x.hi>=x.lo&&x.max>=x.min);
+}
+function lookupSKF(rows,serie,classe,d){
+ if(!serie||!classe||d===null||d<=0)return {state:"incomplete"};
+ const hits=rows.filter(x=>x.serie===serie&&x.classe===classe.trim().toUpperCase()&&(x.lo===x.hi?serie==="storica"&&d===x.hi:d>x.lo&&d<=x.hi));
+ if(!hits.length)return {state:"missing"};
+ if(new Set(hits.map(x=>x.min+"|"+x.max)).size!==1)return {state:"ambiguous"};
+ return {state:"ok",min:hits[0].min,max:hits[0].max,kind:hits[0].kind};
+}
+async function loadSKF(){
+ try{
+  const inputs=[["tabella_gioco.csv","storica"],["tabella_gioco_normale_skf.csv","normale"],["tabella_gioco_diviso_skf.csv","diviso"]];
+  const lists=await Promise.all(inputs.map(async ([path,kind])=>{const res=await fetch("./"+path,{cache:"no-store",credentials:"omit"});if(!res.ok)throw Error("Tabella non disponibile");const rows=parseSKF(await res.text(),kind);if(!rows.length)throw Error("Tabella vuota");return rows;}));
+  skfRows=lists.flat();skfReady=true;
+ }catch{skfReady=false;}
+ if(draft)previewSKF();
+}
+function previewSKF(){
+ const output=$("skf-result"),apply=$("skf-apply");skfProposal=null;apply.disabled=true;
+ if(!draft)return;
+ if(!skfReady){output.textContent="Tabelle SKF non disponibili. Usa esclusivamente limiti verificati sul disegno.";return;}
+ const serie=$("ed-serieGioco").value,classe=$("ed-classeGioco").value,d=numberValue($("ed-irDiametro").value);
+ const result=lookupSKF(skfRows,serie,classe,d);
+ if(result.state==="incomplete"){output.textContent="Seleziona riferimento, classe e foro IR.";return;}
+ if(result.state==="missing"){output.textContent="Nessun intervallo disponibile per questa combinazione. Mantieni o inserisci i limiti controllati sul disegno.";return;}
+ if(result.state==="ambiguous"){output.textContent="Valori discordanti nella tabella: nessuna proposta automatica. Verifica il documento.";return;}
+ const source=result.kind==="storica"?"Tabella storica non verificata":result.kind==="diviso"?"SKF classi divise, stampa 04/01/2021":"SKF normale, stampa 20/07/2020";
+ const load=({BCG02:"±2",BCG04:"±5",BCG06:"±15"})[serie];
+ output.textContent="Proposta: "+result.min+" – "+result.max+" µm. "+source+(load?" · carico indicato "+load+" daN":"")+". Controlla il riferimento di produzione.";
+ skfProposal=result;apply.disabled=busy;
+}
+$("skf-apply").onclick=()=>{
+ if(!draft||busy||!skfProposal)return;
+ if(!confirm("Applicare i limiti proposti? Conferma dopo il confronto con la specifica approvata."))return;
+ $("ed-giocoMin").value=skfProposal.min;$("ed-giocoMax").value=skfProposal.max;
+};
+async function showHistory(row){
+ await action(async()=>{
+  const panel=$("cloud-history");panel.replaceChildren(element("h2","Storico · "+row.recipe.codice));
+  const data=await json("/api/history?code="+encodeURIComponent(row.code));
+  if(!Array.isArray(data.items))throw Error("Storico non disponibile.");
+  for(const version of data.items){
+   const r=version.recipe||{},box=element("article");
+   box.append(element("strong","Versione "+version.revision+(version.deleted?" · eliminata":"")),element("small",version.updatedAt||""));
+   const d=element("details");d.append(element("summary","Dati della versione"));
+   for(const [k,v] of Object.entries(r))if(k!=="disegnoUrl"&&k!=="disegnoR2Key")d.append(element("p",k+": "+String(v)));
+   box.append(d);
+   if(keyPattern.test(r.disegnoR2Key||""))box.append(button("Apri disegno di questa versione",()=>showPhoto(r)));
+   panel.append(box);
+  }
+  if(data.next)panel.append(element("small","Mostrate le 100 versioni più recenti."));
+  const close=element("button","Chiudi storico");close.className="secondary";close.onclick=()=>panel.replaceChildren();panel.append(close);panel.scrollIntoView({block:"start"});
+ });
+}
+
 function closeEditor(){
  draft=null;editorFile=null;$("editor-form").reset();$("editor-file-status").textContent="";$("editor-status").textContent="";$("cloud-editor").hidden=true;
 }
@@ -151,14 +216,17 @@ function openEditor(row=null){
  $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":"Nuovo codice nell’archivio online";
  for(const k of fields){
   const label=element("label",fieldLabels[k]||k,k==="codice"?"wide":"");
-  const input=element("input");input.id="ed-"+k;input.value=draft.base[k]??"";input.maxLength=k==="codice"?200:4000;
+  const input=element(k==="serieGioco"?"select":"input");input.id="ed-"+k;
+  if(k==="serieGioco"){const values=["","storica","BCG02","BCG04","BCG06"];const prior=draft.base[k]||"";if(prior&&!values.includes(prior))values.push(prior);for(const v of values){const opt=element("option",v||"Seleziona riferimento");opt.value=v;input.append(opt);}}
+  input.value=draft.base[k]??"";input.maxLength=k==="codice"?200:4000;
+  if(["serieGioco","classeGioco","irDiametro"].includes(k))input.addEventListener("input",previewSKF);
   if(k==="codice"){input.required=true;input.readOnly=!!row;}
   if(numericFields.has(k))input.inputMode="decimal";
   if(k==="serieGioco")input.placeholder="storica / BCG02 / BCG04 / BCG06";
   label.append(input);$("editor-fields").append(label);
  }
  $("editor-drawing").textContent=draft.base.disegnoR2Key?"Disegno privato R2 presente.":draft.base.disegnoUrl?"Vecchio link presente. Seleziona una foto per sostituirlo con il file R2.":"Nessun disegno associato.";
- $("cloud-editor").hidden=false;$("cloud-editor").scrollIntoView({block:"start"});syncControls();
+ $("cloud-editor").hidden=false;$("cloud-editor").scrollIntoView({block:"start"});syncControls();previewSKF();
 }
 function chooseEditorFile(f){
  if(!draft||busy||!f)return;
@@ -205,5 +273,5 @@ $("editor-camera").onclick=()=>$("editor-capture").click();
 $("editor-cancel").onclick=()=>{if(!busy&&confirm("Chiudere senza salvare?"))closeEditor();};
 $("editor-form").onsubmit=saveEditor;
 
-window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];closeEditor();photoClear();render();});
-readLocal();render();
+window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];closeEditor();$("cloud-history").replaceChildren();photoClear();render();});
+readLocal();render();loadSKF();
