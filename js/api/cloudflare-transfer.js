@@ -66,6 +66,7 @@ function render(){
  }
  if(connected&&!remote.length)remoteList.append(element("p","Archivio Cloudflare vuoto."));
  renderCloudCatalog();
+ renderArchived();
  syncControls();
 }
 function renderCloudCatalog(){
@@ -82,7 +83,7 @@ function renderCloudCatalog(){
   info.append(element("strong",r.codice||row.code),element("small","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm"),element("small",r.classeGioco?"Gioco "+r.classeGioco+": "+(r.giocoMin??"—")+" – "+(r.giocoMax??"—")+" µm":"Gioco non registrato"));
   if(keyPattern.test(r.disegnoR2Key||""))info.append(element("span","Disegno R2","tag"));else if(r.disegnoUrl)info.append(element("span","Link esterno","tag"));
   info.append(element("span","V"+row.revision,"tag"));
-  if($("show-thumbs").checked&&keyPattern.test(r.disegnoR2Key||"")){const thumb=element("img",null,"recipe-thumb");thumb.alt="";thumb.loading="lazy";box.append(thumb);queueThumb(thumb,r.disegnoR2Key);}
+  if($("show-thumbs").checked){if(keyPattern.test(r.disegnoR2Key||"")){const thumb=element("img",null,"recipe-thumb");thumb.alt="";thumb.loading="lazy";box.append(thumb);queueThumb(thumb,r.disegnoR2Key);}else{box.append(element("div",r.disegnoUrl?"LINK":"NO FOTO","recipe-thumb recipe-thumb-empty"));}}
   box.append(info,button("Apri",()=>openSheet(row)));
   box.addEventListener("click",e=>{if(!e.target.closest("button")&&!busy)openSheet(row);});remoteList.append(box);
  }
@@ -148,17 +149,49 @@ function renderSheet(row){
  const box=element("article"),top=element("div",null,"catalog-title"),close=element("button","Chiudi");close.className="secondary";close.onclick=()=>{clearSheet();syncControls();window.scrollTo({top:0,behavior:"instant"});};
  top.append(element("h2",r.codice||row.code),close);box.append(top,element("small","Scheda tecnica · versione "+row.revision));
  const printNote=element("p","Copia della ricetta registrata. Verificare specifica di produzione e revisione approvata.");printNote.id="print-note";box.append(printNote);
- const grid=element("div",null,"grid");
- for(const k of fields.filter(x=>x!=="codice")){
-  const item=element("div",null,"metric");item.append(element("small",fieldLabels[k]||k),element("b",String(r[k]??"—")));grid.append(item);
+ const actions=element("div",null,"sheet-actions no-print");
+ const edit=button("Modifica ricetta",()=>openEditor(row)),print=button("Stampa / PDF",()=>printSheet(row)),history=button("Storico",()=>showHistory(row)),duplicate=button("Duplica",()=>openEditor(null,row));
+ print.className="secondary";history.className="secondary";duplicate.className="secondary";
+ actions.append(edit,print,history,duplicate);box.append(actions);
+ const groups=[["Anelli e dimensioni",["irTipo","irDiametro","orTipo","orDiametro"]],["Componenti",["diametroSfera","numeroSfere","gabbiaTipo","schermoTipo"]],["Lubrificazione",["grassoTipo","pesoMin","pesoMax"]],["Controllo gioco radiale",["classeGioco","serieGioco","giocoMin","giocoMax"]]];
+ for(const [label,keys] of groups){
+  box.append(element("h3",label,"sheet-group"));const grid=element("div",null,"grid sheet-grid");
+  for(const k of keys){const item=element("div",null,"metric");item.append(element("small",fieldLabels[k]||k),element("b",String(r[k]??"—")));grid.append(item);}
+  box.append(grid);
  }
- box.append(grid);
+ const missing=fields.filter(k=>k!=="codice"&&(r[k]==null||r[k]==="")).length;
+ if(missing)box.append(element("p",missing+" campi tecnici non compilati. Verifica il disegno prima di completarli.","sheet-missing"));
+ box.append(element("h3","Disegno tecnico","sheet-group"));
  if(keyPattern.test(r.disegnoR2Key||"")){const drawing=element("div","Caricamento disegno privato…");drawing.id="sheet-drawing";box.append(drawing);}
  else box.append(element("small",r.disegnoUrl?"Disegno collegato esternamente; seleziona l’originale nella modifica per archiviarlo su R2.":"Nessun disegno associato."));
- box.append(button("Modifica ricetta / foto",()=>openEditor(row)),button("Storico",()=>showHistory(row)),button("Stampa / PDF",()=>printSheet(row)));
+ const bottom=element("div",null,"sheet-actions no-print");const archive=button("Archivia ricetta",()=>changeArchive(row,true));archive.className="danger";bottom.append(button("Modifica ricetta / foto",()=>openEditor(row)),archive);box.append(bottom);
  panel.append(box);attachSheetPhoto(row);
 }
 function openSheet(row){if(!connected||busy)return;clearSheet();sheetCode=row.code;renderSheet(row);syncControls();window.scrollTo({top:0,behavior:"instant"});}
+
+function renderArchived(){
+ const panel=$("archived-list");panel.replaceChildren();
+ const rows=connected?remote.filter(x=>x.deleted):[];
+ $("archived-count").textContent=connected?String(rows.length):"—";
+ if(!rows.length)panel.append(element("small",connected?"Nessuna ricetta archiviata.":"Collega l’archivio."));
+ for(const row of rows){
+  const box=element("article",null,"archived-row");box.append(element("strong",row.recipe?.codice||row.code),element("small","Archiviata · versione "+row.revision),button("Ripristina nel catalogo",()=>changeArchive(row,false)));panel.append(box);
+ }
+}
+async function changeArchive(row,deleted){
+ if(!connected||busy||!!row.deleted===deleted)return;
+ const name=row.recipe?.codice||row.code;
+ if(!confirm(deleted?"Archiviare "+name+"? Scomparirà dal catalogo attivo ma dati, foto e storico resteranno conservati.":"Ripristinare "+name+" nel catalogo attivo?"))return;
+ await action(async()=>{
+  await loadRemote();const latest=remote.find(x=>x.code===row.code);
+  if(!latest||latest.revision!==row.revision||!!latest.deleted===deleted)throw Error("La versione è cambiata. Aggiorna il catalogo prima di riprovare.");
+  const saved=await json("/api/recipes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipe:latest.recipe,expectedRevision:latest.revision,deleted})});
+  if(saved.code!==row.code||saved.revision!==latest.revision+1||saved.deleted!==deleted)throw Error("Esito non verificato. Aggiorna il catalogo prima di riprovare.");
+  await loadRemote();if(!remote.some(x=>x.code===row.code&&x.revision===saved.revision&&x.deleted===deleted))throw Error("Rilettura non riuscita.");
+  clearSheet();render();status(deleted?"Ricetta archiviata. Puoi ripristinarla in Cloud e backup.":"Ricetta ripristinata nel catalogo.");
+ });
+}
+
 function navigate(view){
  if(busy)return;
  if(draft){if(!confirm("Abbandonare la scheda non salvata?"))return;closeEditor();}
@@ -295,13 +328,13 @@ async function showHistory(row){
 function closeEditor(){
  draft=null;editorFile=null;$("editor-form").reset();$("editor-file-status").textContent="";$("editor-status").textContent="";$("cloud-editor").hidden=true;
 }
-function openEditor(row=null){
+function openEditor(row=null,source=null){
  if(!connected||busy)return;
  if(draft&&!confirm("Abbandonare le modifiche non salvate?"))return;
- clearSheet();activeView="catalog";draft={row,base:row?{...row.recipe}:{}};
+ clearSheet();activeView="catalog";const base= row?{...row.recipe}:source?Object.fromEntries(fields.filter(k=>k!=="codice"&&source.recipe[k]!=null).map(k=>[k,source.recipe[k]])):{};draft={row,base,duplicated:!!source};
  editorFile=null;$("editor-form").reset();$("editor-fields").replaceChildren();$("editor-status").textContent="";$("editor-file-status").textContent="";
- $("editor-title").textContent=row?"Modifica "+row.recipe.codice:"Nuova ricetta cloud";
- $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":"Nuovo codice nell’archivio online";
+ $("editor-title").textContent=row?"Modifica "+row.recipe.codice:source?"Duplica da "+source.recipe.codice:"Nuova ricetta cloud";
+ $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":source?"Inserisci un nuovo codice, verifica tutti i dati e allega il disegno corretto. Il disegno originale non viene duplicato.":"Nuovo codice nell’archivio online";
  for(const k of fields){
   const label=element("label",fieldLabels[k]||k,k==="codice"?"wide":"");
   const input=element(k==="serieGioco"?"select":"input");input.id="ed-"+k;
