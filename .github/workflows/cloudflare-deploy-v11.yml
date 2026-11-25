@@ -1,0 +1,93 @@
+name: Cloudflare - pubblica Worker ricette
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-ricette-infrastructure
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      RECIPES_ADMIN_TOKEN: ${{ secrets.SKF_RECIPES_ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Verifica e pubblicazione iniziale dedicata
+        shell: python
+        run: |
+          import os, json, urllib.request, urllib.error, pathlib, secrets, re, time
+          token = os.environ.get("CF_TOKEN","")
+          admin = os.environ.get("RECIPES_ADMIN_TOKEN","")
+          if not token or len(admin) < 32 or len(admin) > 128 or not re.fullmatch(r"[A-Za-z0-9_-]+",admin) or admin == token:
+              raise SystemExit("Configura SKF_RECIPES_ADMIN_TOKEN con una chiave casuale distinta da quella Cloudflare, 32-128 caratteri (lettere, numeri, - e _).")
+          name = "skf-ricette-api"
+          bucket = "skf-ricette-foto"
+          def api(path, method="GET", payload=None, eu=False, multipart=None):
+              headers={"Authorization":"Bearer "+token,"Accept":"application/json"}
+              if eu: headers["cf-r2-jurisdiction"]="eu"
+              data=None
+              if payload is not None:
+                  data=json.dumps(payload).encode()
+                  headers["Content-Type"]="application/json"
+              if multipart is not None:
+                  boundary,data=multipart
+                  headers["Content-Type"]="multipart/form-data; boundary="+boundary
+              req=urllib.request.Request("https://api.cloudflare.com/client/v4"+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=45) as response: result=json.load(response)
+              except urllib.error.HTTPError as e:
+                  raise SystemExit("API Cloudflare HTTP %s: operazione interrotta." % e.code)
+              if not result.get("success"): raise SystemExit("Operazione Cloudflare rifiutata.")
+              return result.get("result")
+          accounts=api("/accounts?per_page=50")
+          if not isinstance(accounts,list) or len(accounts)!=1: raise SystemExit("Account non univoco.")
+          prefix="/accounts/"+accounts[0]["id"]
+          dbs=api(prefix+"/d1/database?name=skf-ricette-db&per_page=100")
+          dbs=[d for d in dbs if d.get("name")=="skf-ricette-db" and d.get("jurisdiction")=="eu"]
+          if len(dbs)!=1: raise SystemExit("D1 UE non trovato.")
+          db=dbs[0]["uuid"]
+          managed=api(prefix+"/r2/buckets/"+bucket+"/domains/managed",eu=True)
+          custom=api(prefix+"/r2/buckets/"+bucket+"/domains/custom",eu=True)
+          if managed.get("enabled") is not False or custom.get("domains")!=[]: raise SystemExit("R2 non privato: interrompo.")
+          scripts=api(prefix+"/workers/scripts")
+          if any(s.get("id")==name or s.get("name")==name for s in scripts): raise SystemExit("Worker omonimo già esistente: non sovrascrivo.")
+          sub=api(prefix+"/workers/subdomain")["subdomain"]
+          if not re.fullmatch(r"[a-z0-9-]+",sub): raise SystemExit("Sottodominio non valido.")
+          schema=pathlib.Path("cloudflare/v11-schema.sql").read_text()
+          query=api(prefix+"/d1/database/"+db+"/query","POST",{"sql":schema})
+          if not isinstance(query,list) or not all(q.get("success") for q in query): raise SystemExit("Schema non verificato.")
+          metadata={"main_module":"worker.mjs","compatibility_date":"2026-11-25","bindings":[{"type":"d1","name":"DB","database_id":db},{"type":"r2_bucket","name":"PHOTOS","bucket_name":bucket,"jurisdiction":"eu"},{"type":"secret_text","name":"RECIPES_ADMIN_TOKEN","text":admin}],"observability":{"enabled":False}}
+          boundary="cf"+secrets.token_hex(16)
+          parts=[]
+          def part(field,content,mime,filename=None):
+              disposition='Content-Disposition: form-data; name="'+field+'"'
+              if filename: disposition+='; filename="'+filename+'"'
+              parts.append(("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+mime+"\r\n\r\n").encode()+content+b"\r\n")
+          part("metadata",json.dumps(metadata).encode(),"application/json")
+          part("worker.mjs",pathlib.Path("cloudflare/v11-worker.mjs").read_bytes(),"application/javascript+module","worker.mjs")
+          payload=b"".join(parts)+("--"+boundary+"--\r\n").encode()
+          api(prefix+"/workers/scripts/"+name,"PUT",multipart=(boundary,payload))
+          api(prefix+"/workers/scripts/"+name+"/subdomain","POST",{"enabled":True,"previews_enabled":False})
+          endpoint="https://"+name+"."+sub+".workers.dev"
+          def check(path,authorized=False):
+              headers={"Authorization":"Bearer "+admin} if authorized else {}
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(endpoint+path,headers=headers),timeout=15) as r: return r.status,json.load(r)
+              except urllib.error.HTTPError as e: return e.code,{}
+              except urllib.error.URLError: return 0,{}
+          for _ in range(6):
+              status,health=check("/health")
+              if status==200 and health.get("service")==name: break
+              time.sleep(5)
+          else: raise SystemExit("Worker creato; endpoint non ancora verificato. Non rilanciare senza controllo.")
+          status,_=check("/api/recipes")
+          if status!=401: raise SystemExit("Verifica accesso anonimo fallita.")
+          status,data=check("/api/check",True)
+          if status!=200 or data!={"database":True,"photos":True}: raise SystemExit("Collegamenti D1/R2 non verificati.")
+          print("Worker dedicato attivo: "+endpoint)
+          print("Accesso anonimo negato; D1 e R2 autenticati verificati.")
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("## Worker ricette attivo\n\n"+endpoint+"\n\nAccesso anonimo negato; D1 e R2 verificati. Nessuna ricetta importata.\n")

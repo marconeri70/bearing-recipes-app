@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS recipe_versions (code TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision > 0), payload TEXT NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)), updated_at TEXT NOT NULL, PRIMARY KEY(code,revision));
