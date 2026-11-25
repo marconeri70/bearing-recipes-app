@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#12345d">
+<title>Recupero ricette - solo lettura</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0a1328;color:#e9f2ff}
+header{padding:25px 17px;background:linear-gradient(120deg,#17479e,#10264a);border-bottom:1px solid #35548b}
+main{max-width:760px;margin:auto;padding:16px}
+h1{font-size:1.55rem;margin:0 0 8px}h2{font-size:1.15rem}
+p,li{line-height:1.5}
+.card{background:#142342;border:1px solid #34486a;padding:17px;border-radius:17px;margin:15px 0}
+.warn{background:#3a2a26;border:1px solid #866753}
+.good{color:#a5f4d4}
+.muted{color:#b8c8df}
+button,.action{display:inline-block;border:0;border-radius:12px;padding:13px 17px;margin:5px 8px 5px 0;background:#62a7ff;color:#071528;font-size:1rem;font-weight:700;cursor:pointer;text-decoration:none}
+button:disabled{background:#56657c;cursor:not-allowed;color:#ced6e3}
+.secondary{background:#334763;color:white}
+code{overflow-wrap:anywhere;color:#b9d5ff}
+details{margin-top:10px}
+a{color:#9cd3ff}
+.status{font-size:1.05rem;font-weight:650}
+</style>
+</head>
+<body>
+<header><h1>Recupero ricette cuscinetti</h1><p>Diagnostica sicura sul dispositivo — non cancella e non modifica nulla.</p></header>
+<main>
+<section class="card warn">
+<strong>Prima di procedere</strong>
+<p>Non disinstallare la PWA, non cancellare cache/dati del sito e non utilizzare la navigazione in incognito. Apri questa pagina sullo <strong>stesso telefono e browser</strong> in cui usavi le ricette.</p>
+</section>
+<section class="card">
+<h2>Ricerca negli archivi precedenti</h2>
+<p id="status" class="status">Controllo delle memorie locali...</p>
+<div id="elenco"></div>
+<button id="refresh" type="button" class="secondary">Ricontrolla</button>
+<button id="backup" type="button" disabled>Scarica backup JSON completo</button>
+</section>
+<section class="card">
+<h2>Come ripristinare senza rischi</h2>
+<p>Se trovi una memoria con ricette, scarica prima il <strong>backup JSON completo</strong>. Poi scarica il <strong>CSV di quell'archivio</strong>, apri la pagina principale e scegli <strong>Importa CSV</strong>. Non effettuare la cancellazione dei vecchi dati.</p>
+<p>Le fotografie salvate direttamente nel browser possono essere recuperate nel backup JSON, ma il CSV trasferisce solo i collegamenti alle immagini. Non confondere il numero zero della pagina principale con una cancellazione accertata.</p>
+<p><a href="./">Torna all'app</a></p>
+</section>
+</main>
+<script>
+(function () {
+"use strict";
+var captured=[];
+var known=["bearing_recipes_lavorazioni_v2","bearing_recipes_lavorazioni","bearing_recipes_v3","bearing_recipes_v4"];
+var fields=["codice","irTipo","irDiametro","orTipo","diametroSfera","numeroSfere","gabbiaTipo","grassoTipo","schermoTipo","pesoMin","pesoMax","classeGioco","giocoMin","giocoMax","disegnoUrl","serieGioco"];
+function readRecords(obj){
+ if(Array.isArray(obj)) return obj;
+ if(obj && Array.isArray(obj.lavorazioni)) return obj.lavorazioni;
+ if(obj && Array.isArray(obj.recipes)) return obj.recipes;
+ if(obj && Array.isArray(obj.data)) return obj.data;
+ return null;
+}
+function first(obj,keys){for(var i=0;i<keys.length;i++){var v=obj[keys[i]];if(v!==undefined&&v!==null&&v!=="") return v;}return "";}
+function normalize(r){
+ return {
+ codice:first(r,["codice","code"]),
+ irTipo:first(r,["irTipo","irType"]),
+ irDiametro:first(r,["irDiametro","irBore"]),
+ orTipo:first(r,["orTipo","orType"]),
+ diametroSfera:first(r,["diametroSfera","ballDiameter"]),
+ numeroSfere:first(r,["numeroSfere","ballCount"]),
+ gabbiaTipo:first(r,["gabbiaTipo","cageType"]),
+ grassoTipo:first(r,["grassoTipo","greaseType"]),
+ schermoTipo:first(r,["schermoTipo","sealType"]),
+ pesoMin:first(r,["pesoMin","weightMin"]),
+ pesoMax:first(r,["pesoMax","weightMax"]),
+ classeGioco:first(r,["classeGioco","clearanceClass"]),
+ giocoMin:first(r,["giocoMin","clearanceMin"]),
+ giocoMax:first(r,["giocoMax","clearanceMax"]),
+ disegnoUrl:first(r,["disegnoUrl","imageUrl"]),
+ serieGioco:first(r,["serieGioco","clearanceSeries"])
+ };
+}
+function csvEsc(v){
+ var s=String(v===undefined||v===null?"":v);
+ return /[;"\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+function download(name,data,mime){
+ var url=URL.createObjectURL(new Blob([data],{type:mime}));
+ var a=document.createElement("a");a.href=url;a.download=name;
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(function(){URL.revokeObjectURL(url)},15000);
+}
+function exportCSV(item){
+ var rows=item.rows.map(normalize).filter(function(x){return String(x.codice).trim()!==""});
+ var content="\uFEFF"+fields.join(";")+"\r\n"+rows.map(function(r){return fields.map(function(f){return csvEsc(r[f])}).join(";")}).join("\r\n");
+ download("ricette-recuperate-"+item.key.replace(/[^a-z0-9_-]/gi,"_")+".csv",content,"text/csv;charset=utf-8");
+}
+function check(){
+ var status=document.getElementById("status"),root=document.getElementById("elenco");
+ root.replaceChildren();captured=[];
+ var keys=known.slice();
+ try{
+  for(var i=0;i<localStorage.length;i++){
+   var k=localStorage.key(i);
+   if(k && /^bearing[_-]?recipes/i.test(k) && keys.indexOf(k)<0)keys.push(k);
+  }
+  keys.forEach(function(key){
+   var raw=localStorage.getItem(key);
+   if(raw===null)return;
+   var parsed,records;
+   try{parsed=JSON.parse(raw);records=readRecords(parsed);}catch(e){records=null}
+   var item={key:key,raw:raw,rows:records||[],valid:Array.isArray(records)};
+   captured.push(item);
+   var div=document.createElement("section");div.className="card";
+   var h=document.createElement("h3");h.textContent=key;div.appendChild(h);
+   var p=document.createElement("p");p.textContent=item.valid?item.rows.length+" ricette trovate": "Dati presenti, formato non riconosciuto";div.appendChild(p);
+   if(item.rows.length){
+    var btn=document.createElement("button");btn.type="button";btn.textContent="Scarica CSV di questo archivio";btn.addEventListener("click",function(){exportCSV(item)});div.appendChild(btn);
+    var detail=document.createElement("details");var summary=document.createElement("summary");summary.textContent="Mostra codici ricette";detail.appendChild(summary);
+    var list=document.createElement("p");list.className="muted";list.textContent=item.rows.map(function(r){return first(r,["codice","code"])||"(senza codice)"}).join(" · ");detail.appendChild(list);div.appendChild(detail);
+   }
+   root.appendChild(div);
+  });
+  if(!captured.length){status.textContent="Nessun archivio ricette trovato in questo browser per questo sito.";status.className="status";}else{
+   var total=captured.reduce(function(n,x){return n+x.rows.length},0);
+   status.textContent="Archivi presenti: "+captured.length+" · Ricette individuate: "+total;
+   status.className="status"+(total?" good":"");
+  }
+  document.getElementById("backup").disabled=!captured.length;
+ }catch(e){status.textContent="Impossibile leggere la memoria locale: "+e.message;}
+}
+document.getElementById("refresh").addEventListener("click",check);
+document.getElementById("backup").addEventListener("click",function(){
+ var obj={exportedAt:new Date().toISOString(),source:location.origin,records:captured.map(function(x){return {key:x.key,raw:x.raw}})};
+ download("backup-ricette-tutte-le-versioni.json",JSON.stringify(obj,null,2),"application/json;charset=utf-8");
+});
+check();
+})();
+</script>
+</body>
+</html>
