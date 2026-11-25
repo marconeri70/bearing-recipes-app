@@ -24,25 +24,23 @@
 
   <div class="app-container">
     <header class="app-header">
-      <div class="header-title">
-        <h1>Ricette Lavorazione Cuscinetti</h1>
-        <span class="badge">IR · OR · sfere · gabbia · grasso · gioco radiale</span>
-      </div>
-      <div class="header-actions">
+      <div class="header-title"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="10" r="3"/><circle cx="38" cy="24" r="3"/><circle cx="24" cy="38" r="3"/><circle cx="10" cy="24" r="3"/></svg></div><div><span class="eyebrow">TERMINALE PRODUZIONE · V10</span><h1>Ricette Lavorazione Cuscinetti</h1><span class="header-sub">Archivio tecnico · componenti e controllo qualità</span></div></div>
+      <div class="header-actions"><button type="button" id="nav-recipes" class="btn btn-light">Ricette</button><button type="button" id="nav-cloud" class="btn btn-light">Cloud e backup</button><details class="tools-menu"><summary>Importa / esporta</summary><div class="tools-popover">
         <button id="btn-export-csv" class="btn btn-light" type="button">⬇️ Esporta CSV</button>
         <button id="btn-import" class="btn btn-light" type="button">⬆️ Importa CSV</button>
         <input type="file" id="file-import" accept=".csv,text/csv" style="display:none" />
         <button id="btn-backup-json" class="btn btn-light" type="button">💾 Backup JSON</button>
         <button id="btn-import-json" class="btn btn-light" type="button">📂 Importa JSON</button>
         <input type="file" id="file-import-json" accept=".json,application/json" style="display:none" />
-        <button id="btn-recupera-archivi" class="btn btn-light" type="button">↩️ Recupera vecchie ricette</button>
+        <button id="btn-recupera-archivi" class="btn btn-light" type="button">↩️ Recupera vecchie ricette</button></div></details>
       </div>
     </header>
 
     <main class="main-content">
-      <section class="list-section">
+      <section class="overview" id="overview"><div><span class="eyebrow">PANORAMICA</span><h2>Archivio lavorazioni</h2><p>Consulta componenti, disegni e limiti di gioco radiale.</p></div><div class="metric-strip"><div class="metric"><span>RICETTE</span><strong id="metric-total">0</strong></div><div class="metric"><span>CON DISEGNO</span><strong id="metric-drawings">0</strong></div><div class="metric"><span>CLASSI GIOCO</span><strong id="metric-classes">0</strong></div><div class="metric cloud-metric"><span>STATO ARCHIVIO</span><strong id="sync-badge" data-state="neutral">Solo locale</strong></div></div></section>
+      <section class="list-section" id="recipes-section">
         <div class="list-header">
-          <h2>Ricette in memoria (<span id="recipes-count">0</span>)</h2>
+          <h2>Catalogo ricette <span class="count-pill" id="recipes-count">0</span></h2>
           <button id="btn-nuova" class="btn btn-primary" type="button">➕ Nuova</button>
         </div>
         <div class="toolbar compact-toolbar">
@@ -51,8 +49,11 @@
             <option value="">Tutte le classi</option>
           </select>
         </div>
-        <details id="firebase-panel" class="firebase-panel" open>
-          <summary>☁️ Archivio Firebase · recupero e backup v9</summary>
+        <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
+        <p class="note">Seleziona una ricetta per aprire la scheda tecnica. Verifica sempre limiti e specifiche approvate prima dell'utilizzo in produzione.</p>
+      </section>
+      <section id="cloud-section" class="list-section is-hidden"><div class="list-header"><h2>Cloud e backup</h2><button id="cloud-back" type="button" class="btn btn-light">← Ricette</button></div>        <details id="firebase-panel" class="firebase-panel">
+          <summary>Recupero originali · Firebase</summary>
           <p id="firebase-status" role="status" aria-live="polite">Preparazione accesso Google...</p>
           <div class="firebase-actions">
             <button id="firebase-login" type="button" class="btn btn-primary" disabled>Accedi con Google</button>
@@ -64,7 +65,7 @@
           <div id="firebase-records" class="firebase-records"></div>
           <p class="note">I due archivi originali sono in sola lettura. Se ci sono più versioni dello stesso codice, selezionane una. I codici locali già presenti non vengono sostituiti.</p>
           <details>
-            <summary>Archivio online v9 (opzionale)</summary>
+            <summary>Archivio precedente v9 (opzionale)</summary>
             <p class="note">Richiede una regola Firestore dedicata. Copia manuale tra dispositivi, con versioni immutabili; nessuna cancellazione o sincronizzazione distruttiva. Non caricare dati aziendali senza autorizzazione.</p>
             <div class="firebase-actions">
               <button id="firebase-push" type="button" class="btn btn-secondary" disabled>Archivia copie online</button>
@@ -72,14 +73,20 @@
             </div>
           </details>
         </details>
-        <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
-        <p class="note">Le copie locali restano su questo dispositivo. Puoi recuperare gli originali da Firebase e scaricare un backup JSON. L’archivio online v9 è opzionale e non sincronizza automaticamente.</p>
-      </section>
+<section class="sync-panel" aria-labelledby="sync-heading">
+  <div class="panel-title"><span class="eyebrow">ARCHIVIO OPERATIVO</span><h3 id="sync-heading">Sincronizzazione e storico</h3></div>
+  <label class="sync-switch"><input id="sync-toggle" type="checkbox" disabled> Attiva sincronizzazione su questo dispositivo</label>
+  <p id="sync-status" role="status" aria-live="polite">Accedi con Google per iniziare.</p>
+  <div class="firebase-actions"><button id="sync-now" class="btn btn-primary" type="button" disabled>Sincronizza ora</button><button id="sync-export" class="btn btn-light" type="button" disabled>Backup cloud JSON</button></div>
+  <p class="note">Richiede regole Firestore v10. Le modifiche vengono confrontate ogni 30 secondi mentre l'app è aperta. I conflitti richiedono una scelta, le cancellazioni sono recuperabili dallo storico. Non attivare senza autorizzazione aziendale.</p>
+  <div id="sync-conflicts" class="firebase-records"></div>
+  <details><summary>Storico e cestino</summary><div class="history-search"><input id="sync-history-code" class="search-input" placeholder="Codice lavorazione" aria-label="Codice per lo storico"><button id="sync-history" class="btn btn-secondary" type="button" disabled>Cerca versioni</button></div><div id="sync-history-list"></div></details>
+</section><p class="note">Le due raccolte originali sono conservate. I disegni R2 con URL pubblico non sono riservati: verifica le autorizzazioni prima di condividere o caricare documenti.</p></section>
 
       <section class="form-section">
         <div id="card-form" class="card is-hidden">
           <div class="card-header">
-            <h2 id="stato-modifica">Nuova lavorazione</h2>
+            <h2 id="stato-modifica">Nuova lavorazione</h2><button id="form-back" type="button" class="btn btn-light">← Catalogo</button>
             <button type="button" id="btn-scheda-tecnica" class="btn btn-secondary btn-sm" disabled>📄 Scheda Tecnica</button>
           </div>
 
