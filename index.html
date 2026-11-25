@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Ricette Lavorazione Cuscinetti</title>
 
-  <link rel="stylesheet" href="./css/styles.css?v=v10.1-mobile" />
+  <link rel="stylesheet" href="./css/styles.css?v=v10.2-diametri" />
   <style>
     /* Critical layout: prevents an oversized logo even if a previous stylesheet is cached. */
     .header-title{display:flex;align-items:center;gap:10px;min-width:0}
@@ -39,7 +39,7 @@
 
   <div class="app-container">
     <header class="app-header">
-      <div class="header-title"><div class="brand-mark" aria-hidden="true" style="width:44px;height:44px;flex:0 0 44px"><svg viewBox="0 0 48 48" width="30" height="30"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="10" r="3"/><circle cx="38" cy="24" r="3"/><circle cx="24" cy="38" r="3"/><circle cx="10" cy="24" r="3"/></svg></div><div><span class="eyebrow">TERMINALE PRODUZIONE · V10.1</span><h1>Ricette Lavorazione Cuscinetti</h1><span class="header-sub">Archivio tecnico · componenti e controllo qualità</span></div></div>
+      <div class="header-title"><div class="brand-mark" aria-hidden="true" style="width:44px;height:44px;flex:0 0 44px"><svg viewBox="0 0 48 48" width="30" height="30"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="24" r="9" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="10" r="3"/><circle cx="38" cy="24" r="3"/><circle cx="24" cy="38" r="3"/><circle cx="10" cy="24" r="3"/></svg></div><div><span class="eyebrow">TERMINALE PRODUZIONE · V10.2</span><h1>Ricette Lavorazione Cuscinetti</h1><span class="header-sub">Archivio tecnico · componenti e controllo qualità</span></div></div>
       <div class="header-actions"><button type="button" id="nav-recipes" class="btn btn-light">Ricette</button><button type="button" id="nav-cloud" class="btn btn-light">Cloud e backup</button><details class="tools-menu"><summary>Importa / esporta</summary><div class="tools-popover">
         <button id="btn-export-csv" class="btn btn-light" type="button">⬇️ Esporta CSV</button>
         <button id="btn-import" class="btn btn-light" type="button">⬆️ Importa CSV</button>
@@ -64,6 +64,15 @@
             <option value="">Tutte le classi</option>
           </select>
         </div>
+        <section class="diameter-search" aria-labelledby="diameter-heading">
+          <div class="diameter-heading"><h3 id="diameter-heading">Ricerca per diametro</h3><button id="clear-diameters" class="btn btn-light btn-sm" type="button">Azzera diametri</button></div>
+          <div class="diameter-grid">
+            <label for="filtro-ir">Foro IR · d (mm)<input id="filtro-ir" class="search-input" type="text" inputmode="decimal" placeholder="Es. 25" autocomplete="off"></label>
+            <label for="filtro-or">Esterno OR · D (mm)<input id="filtro-or" class="search-input" type="text" inputmode="decimal" placeholder="Es. 52" autocomplete="off"></label>
+          </div>
+          <p class="diameter-summary" id="diameter-summary" aria-live="polite">Inserisci uno o entrambi i diametri.</p>
+          <p class="diameter-missing" id="diameter-missing" aria-live="polite"></p>
+        </section>
         <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
         <p class="note">Seleziona una ricetta per aprire la scheda tecnica. Verifica sempre limiti e specifiche approvate prima dell'utilizzo in produzione.</p>
       </section>
@@ -118,6 +127,7 @@
               <div class="form-group"><label for="irTipo">Tipo Anello Interno (IR)</label><input type="text" id="irTipo" /></div>
               <div class="form-group"><label for="irDiametro">Diametro foro IR d [mm]</label><input type="number" step="any" id="irDiametro" /></div>
               <div class="form-group"><label for="orTipo">Tipo Anello Esterno (OR)</label><input type="text" id="orTipo" /></div>
+              <div class="form-group"><label for="orDiametro">Diametro esterno OR D [mm]</label><input type="text" inputmode="decimal" id="orDiametro" placeholder="Es. 52" /><small class="hint">Facoltativo: inserisci la misura verificata dal disegno.</small></div>
               <div class="form-group"><label for="diametroSfera">Diametro Sfera [mm]</label><input type="number" step="any" id="diametroSfera" /></div>
               <div class="form-group"><label for="numeroSfere">Numero Sfere</label><input type="number" id="numeroSfere" /></div>
             </div>
@@ -202,6 +212,7 @@
             <div class="scheda-item"><span class="label">IR - Tipo</span><span id="scheda-ir" class="value">-</span></div>
             <div class="scheda-item"><span class="label">OR - Tipo</span><span id="scheda-or" class="value">-</span></div>
             <div class="scheda-item"><span class="label">Diametro foro IR</span><span id="scheda-ir-diametro" class="value">-</span></div>
+            <div class="scheda-item"><span class="label">Diametro esterno OR</span><span id="scheda-or-diametro" class="value">Non registrato</span></div>
           </div>
         </section>
         <section class="scheda-section">
@@ -241,7 +252,7 @@
     <div class="zoom-container"><img id="zoomed-image" src="" alt="Zoom Disegno" /></div>
   </div>
 
-  <script type="module" src="./js/main.js"></script>
+  <script type="module" src="./js/main.js?v=v10.2-diametri"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

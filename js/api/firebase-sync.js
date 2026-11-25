@@ -9,7 +9,10 @@ const el=id=>document.getElementById(id), key=s=>String(s??"").trim().toLowerCas
 function recipe(r){
  const out={};
  for(const f of FIELDS){const v=r?.[f];if(NUM.has(f)){const n=v==null||v===""?NaN:Number(String(v).replace(",","."));out[f]=Number.isFinite(n)?n:null;}else out[f]=typeof v==="string"?v:"";}
- out.codice=out.codice.trim();out.serieGioco||="storica";return out;
+ out.codice=out.codice.trim();out.serieGioco||="storica";
+ const D=r?.orDiametro==null||String(r.orDiametro).trim()===""?NaN:Number(String(r.orDiametro).replace(",","."));
+ if(Number.isFinite(D)&&D>0)out.orDiametro=D;
+ return out;
 }
 const serial=r=>JSON.stringify(recipe(r));
 async function hash(s){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,"0")).join("");}

@@ -20,6 +20,8 @@ function normalized(raw) {
   }
   r.codice = r.codice.trim();
   r.serieGioco ||= "storica";
+  const D=raw.orDiametro==null||String(raw.orDiametro).trim()===""?NaN:Number(String(raw.orDiametro).replace(",","."));
+  if(Number.isFinite(D)&&D>0)r.orDiametro=D;
   // Non eseguire URL arbitrari o formati di immagine attivi.
   try { if (new URL(r.disegnoUrl).protocol !== "https:") r.disegnoUrl = ""; } catch { r.disegnoUrl = ""; }
   if (!/^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$/i.test(r.disegnoData)) r.disegnoData = "";

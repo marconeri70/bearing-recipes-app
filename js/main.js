@@ -28,6 +28,7 @@ let idCorrente = null;
 let immagineCorrenteData = "";
 let filtroTesto = "";
 let filtroClasse = "";
+let filtroIR = "", filtroOR = "";
 let fotoUploadInCorso = false;
 let syncController = null;
 
@@ -227,6 +228,22 @@ function aggiornaConteggio() {
   $("metric-classes").textContent = new Set(lavorazioni.map(r=>r.classeGioco).filter(Boolean)).size;
 }
 
+// Diametri nominali in mm. Accetta punto e virgola; non deduce misure dai codici.
+function diametroValido(value) {
+  if (value == null || !String(value).trim()) return null;
+  const raw = String(value).trim();
+  if (!/^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(raw)) return null;
+  const n = Number(raw.replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function filtraDiametri(lista, ir, or) {
+  const hasIR = !!String(ir).trim(), hasOR = !!String(or).trim();
+  const d = diametroValido(ir), D = diametroValido(or);
+  const invalid = (hasIR && d === null) || (hasOR && D === null);
+  const missing = lista.filter(lav => (hasIR && diametroValido(lav.irDiametro) === null) || (hasOR && diametroValido(lav.orDiametro) === null)).length;
+  const matches = invalid ? [] : lista.filter(lav => (!hasIR || diametroValido(lav.irDiametro) === d) && (!hasOR || diametroValido(lav.orDiametro) === D));
+  return {matches, missing, invalid, hasIR, hasOR};
+}
 function ricetteFiltrate() {
   let lista = [...lavorazioni];
   if (filtroTesto) {
@@ -235,6 +252,15 @@ function ricetteFiltrate() {
       .filter(Boolean).join(" ").toLowerCase().includes(q));
   }
   if (filtroClasse) lista = lista.filter(lav => lav.classeGioco === filtroClasse);
+  const result = filtraDiametri(lista, filtroIR, filtroOR);
+  const active = result.hasIR || result.hasOR;
+  const summary = $("diameter-summary"), missing = $("diameter-missing");
+  if (summary) summary.textContent = result.invalid ? "Inserisci diametri numerici positivi (mm)." : active ? result.matches.length + " ricette corrispondenti alle misure impostate." : "Inserisci uno o entrambi i diametri.";
+  if (missing) {
+    const n = active ? result.missing : lista.filter(lav => diametroValido(lav.orDiametro) === null).length;
+    missing.textContent = n && !result.invalid ? (active ? n + " ricette escluse per misure mancanti." : n + " ricette senza diametro OR registrato.") : "";
+  }
+  lista = result.matches;
   lista.sort((a, b) => String(a.codice || "").localeCompare(String(b.codice || "")));
   return lista;
 }
@@ -282,8 +308,9 @@ function renderLista() {
     const sub = document.createElement("span");
     sub.className = "riga-sub";
     const parts = [
-      [lav.irTipo, lav.orTipo].filter(Boolean).join(" | "),
-      lav.irDiametro != null ? `d=${lav.irDiametro} mm` : "",
+      [lav.irTipo ? "IR " + lav.irTipo : "", lav.orTipo ? "OR " + lav.orTipo : ""].filter(Boolean).join(" | "),
+      diametroValido(lav.irDiametro) !== null ? `IR Ø ${lav.irDiametro} mm` : "",
+      diametroValido(lav.orDiametro) !== null ? `OR Ø ${lav.orDiametro} mm` : "OR Ø non registrato",
       lav.classeGioco ? `Gioco ${lav.classeGioco}: ${lav.giocoMin ?? "?"}–${lav.giocoMax ?? "?"} µm` : ""
     ].filter(Boolean);
     sub.textContent = parts.join(" · ");
@@ -336,6 +363,7 @@ function caricaLavorazioneInForm(id) {
   $("irTipo").value = lav.irTipo || "";
   $("irDiametro").value = lav.irDiametro ?? "";
   $("orTipo").value = lav.orTipo || "";
+  $("orDiametro").value = lav.orDiametro ?? "";
   $("diametroSfera").value = lav.diametroSfera ?? "";
   $("numeroSfere").value = lav.numeroSfere ?? "";
   $("gabbiaTipo").value = lav.gabbiaTipo || "";
@@ -368,6 +396,7 @@ function leggiDatiForm() {
     irTipo: $("irTipo").value.trim(),
     irDiametro: leggiNumero("irDiametro"),
     orTipo: $("orTipo").value.trim(),
+    orDiametro: diametroValido($("orDiametro").value),
     diametroSfera: leggiNumero("diametroSfera"),
     numeroSfere: leggiNumero("numeroSfere"),
     gabbiaTipo: $("gabbiaTipo").value.trim(),
@@ -390,6 +419,7 @@ function gestisciSubmit(event) {
   event.preventDefault();
   const lav = leggiDatiForm();
   if (!lav.codice) return alert("Inserisci il codice lavorazione.");
+  if ($("orDiametro").value.trim() && lav.orDiametro === null) return alert("Inserisci un diametro OR numerico positivo in mm, oppure lascia vuoto.");
   if (fotoUploadInCorso) return alert("Caricamento foto online ancora in corso. Attendi l'esito prima di salvare.");
   if (immagineCorrenteData && !lav.disegnoUrl && !confirm("La foto è solo temporanea e NON apparirà nella scheda dopo il salvataggio. Vuoi salvare soltanto i dati tecnici?")) return;
   const duplicato = lavorazioni.find(l =>
@@ -570,7 +600,7 @@ function aggiornaGiocoIntegrato() {
 
 function exportToCSV() {
   if (!lavorazioni.length) return alert("Nessuna lavorazione salvata.");
-  const headers = ["codice", "irTipo", "irDiametro", "orTipo", "diametroSfera", "numeroSfere", "gabbiaTipo", "grassoTipo", "schermoTipo", "pesoMin", "pesoMax", "classeGioco", "giocoMin", "giocoMax", "disegnoUrl", "serieGioco"];
+  const headers = ["codice", "irTipo", "irDiametro", "orTipo", "diametroSfera", "numeroSfere", "gabbiaTipo", "grassoTipo", "schermoTipo", "pesoMin", "pesoMax", "classeGioco", "giocoMin", "giocoMax", "disegnoUrl", "serieGioco", "orDiametro"];
   const rows = lavorazioni.map(lav => headers.map(h => escapeCSV(lav[h] ?? "")).join(";"));
   const csv = headers.join(";") + "\n" + rows.join("\n");
   const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
@@ -612,6 +642,7 @@ function parseImportCSV(text) {
         irTipo: getByHeader(row, header, ["irTipo", "irType", "IR", "IR - Tipo"]),
         irDiametro: toNumberOrNull(getByHeader(row, header, ["irDiametro", "irBore", "Diametro foro IR", "d_min", "diametro"])),
         orTipo: getByHeader(row, header, ["orTipo", "orType", "OR", "OR - Tipo"]),
+        orDiametro: diametroValido(getByHeader(row, header, ["orDiametro", "orDiameter", "outerDiameter", "Diametro esterno OR", "Diametro esterno OR D [mm]"])),
         diametroSfera: toNumberOrNull(getByHeader(row, header, ["diametroSfera", "ballDiameter", "Sfera - Diametro (mm)"])),
         numeroSfere: toNumberOrNull(getByHeader(row, header, ["numeroSfere", "ballCount", "Sfera - Numero sfere (n)"])),
         gabbiaTipo: getByHeader(row, header, ["gabbiaTipo", "cageType", "Gabbia - Tipo"]),
@@ -633,6 +664,7 @@ function parseImportCSV(text) {
         irTipo: row[1] || "",
         irDiametro: toNumberOrNull(row[2]),
         orTipo: row[3] || "",
+        orDiametro: diametroValido(row[16]),
         diametroSfera: toNumberOrNull(row[4]),
         numeroSfere: toNumberOrNull(row[5]),
         gabbiaTipo: row[6] || "",
@@ -766,6 +798,7 @@ function apriSchedaTecnica() {
   $("scheda-sub").textContent = `IR: ${lav.irTipo || "-"} · OR: ${lav.orTipo || "-"}`;
   $("scheda-ir").textContent = lav.irTipo || "-";
   $("scheda-or").textContent = lav.orTipo || "-";
+  $("scheda-or-diametro").textContent = diametroValido(lav.orDiametro) !== null ? `${lav.orDiametro} mm` : "Non registrato";
   $("scheda-ir-diametro").textContent = lav.irDiametro != null ? `${lav.irDiametro} mm` : "-";
   $("scheda-sfere").textContent = `Ø ${lav.diametroSfera ?? "-"} mm · n=${lav.numeroSfere ?? "-"}`;
   $("scheda-gabbia").textContent = lav.gabbiaTipo || "-";
@@ -821,6 +854,7 @@ function applicaDatiEstratti(dati) {
     irTipo: "irTipo",
     irDiametro: "irDiametro",
     orTipo: "orTipo",
+    orDiametro: "orDiametro",
     diametroSfera: "diametroSfera",
     numeroSfere: "numeroSfere",
     gabbiaTipo: "gabbiaTipo",
@@ -1024,13 +1058,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("filtro-ricette")?.addEventListener("input", (e) => { filtroTesto = e.target.value; renderLista(); });
   $("filtro-classe")?.addEventListener("change", (e) => { filtroClasse = e.target.value; renderLista(); });
+  $("filtro-ir")?.addEventListener("input", e => { filtroIR = e.target.value; renderLista(); });
+  $("filtro-or")?.addEventListener("input", e => { filtroOR = e.target.value; renderLista(); });
+  $("clear-diameters")?.addEventListener("click", () => {
+    filtroIR = filtroOR = ""; $("filtro-ir").value = $("filtro-or").value = ""; renderLista();
+  });
   const showRecipes=()=>{ $("cloud-section").classList.add("is-hidden"); nascondiForm(); $("overview").classList.remove("is-hidden"); $("recipes-section").classList.remove("is-hidden"); window.scrollTo(0,0); };
   $("nav-recipes").onclick=()=>{if(!$("card-form").classList.contains("is-hidden")&&!confirm("Tornare al catalogo senza salvare le modifiche?"))return;showRecipes();};
   $("form-back").onclick=()=>{if(confirm("Tornare al catalogo senza salvare le modifiche?"))showRecipes();};
   $("cloud-back").onclick=showRecipes;
   $("nav-cloud").onclick=()=>{if(!$("card-form").classList.contains("is-hidden")&&!confirm("Aprire il cloud senza salvare le modifiche?"))return; $("cloud-section").classList.remove("is-hidden");nascondiForm();$("overview").classList.add("is-hidden");$("recipes-section").classList.add("is-hidden");window.scrollTo(0,0);};
   // Import dinamico: un problema di rete Firebase non blocca le funzioni locali.
-  import("./api/firebase-recovery.js").then(m => m.installFirebasePanel({
+  import("./api/firebase-recovery.js?v=v10.2-diametri").then(m => m.installFirebasePanel({
     getLocal: () => lavorazioni,
     importSelected: rows => {
       aggiungiRicetteSenzaDuplicati(rows, "Firebase");
@@ -1041,11 +1080,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       $("filtro-classe").value = filtroClasse;
     },
     download: scaricaBlob
-  })).then(()=>import("./api/firebase-sync.js")).then(m=>{
+  })).then(()=>import("./api/firebase-sync.js?v=v10.2-diametri")).then(m=>{
     syncController=m.installSync({getLocal:()=>lavorazioni,canApply:()=>$("card-form").classList.contains("is-hidden")&&$("scheda-modal").classList.contains("is-hidden")&&!fotoUploadInCorso,download:scaricaBlob,replaceLocal:(code,record)=>{
       const current=lavorazioni.find(r=>String(r.codice||"").trim().toLowerCase()===code);
       const next=lavorazioni.filter(r=>String(r.codice||"").trim().toLowerCase()!==code);
-      if(record)next.push({...current,...record,id:current?.id||generaId()});
+      if(record)next.push({...current,...record,orDiametro:record.orDiametro??null,id:current?.id||generaId()});
       if(!salvaSuStorage(next))return false;
       lavorazioni=next;
       const opts=Array.from($("classeGioco").options).map(o=>o.value).filter(Boolean);

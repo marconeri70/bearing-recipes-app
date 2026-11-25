@@ -80,3 +80,16 @@ html,body{background:var(--v10-bg);color:var(--v10-ink)}.app-container{max-width
   .metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
   .scheda-grid{grid-template-columns:1fr}
 }
+
+/* V10.2 — ricerca dimensionale nominale, responsive */
+.diameter-search{border:1px solid #c9dcea;border-radius:11px;background:#f3f8fc;padding:11px;margin:0 0 12px}
+.diameter-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.diameter-heading h3{font-size:.94rem;margin:0;color:#164e80}
+.diameter-heading .btn{font-size:.73rem;padding:6px 9px;min-height:36px}
+.diameter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.diameter-grid label{display:grid;gap:5px;min-width:0;font-size:.76rem;font-weight:700;color:#314f68}
+.diameter-grid input{width:100%;min-width:0;font-variant-numeric:tabular-nums}
+.diameter-summary,.diameter-missing{font-size:.78rem;margin:8px 0 0;line-height:1.35;color:#315775}
+.diameter-missing{color:#75551e}
+.diameter-missing:empty{display:none}
+@media(max-width:350px){.diameter-grid{gap:6px}.diameter-grid label{font-size:.7rem}}

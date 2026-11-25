@@ -3,8 +3,8 @@
 const MAX_PHOTO = 8 * 1024 * 1024;
 const PROMPT = `Sei un tecnico esperto di disegni di cuscinetti. Estrai SOLO i dati leggibili.
 Restituisci un JSON senza markdown con queste chiavi, null se non identificabile:
-{"codice":null,"irTipo":null,"irDiametro":null,"orTipo":null,"diametroSfera":null,"numeroSfere":null,"gabbiaTipo":null,"grassoTipo":null,"schermoTipo":null,"pesoMin":null,"pesoMax":null,"classeGioco":null}
-Non dedurre valori non presenti, non aggiungere misure non visibili. Numeri con punto decimale.`;
+{"codice":null,"irTipo":null,"irDiametro":null,"orTipo":null,"orDiametro":null,"diametroSfera":null,"numeroSfere":null,"gabbiaTipo":null,"grassoTipo":null,"schermoTipo":null,"pesoMin":null,"pesoMax":null,"classeGioco":null}
+irDiametro indica il foro d e orDiametro il diametro esterno D. Non confondere il diametro esterno con quello della pista o con il codice OR. Non dedurre valori non presenti, non aggiungere misure non visibili. Numeri con punto decimale.`;
 
 function json(value, status = 200, origin = "") {
   return new Response(JSON.stringify(value), { status, headers: {

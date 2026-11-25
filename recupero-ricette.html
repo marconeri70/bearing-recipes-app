@@ -51,7 +51,7 @@ a{color:#9cd3ff}
 "use strict";
 var captured=[];
 var known=["bearing_recipes_lavorazioni_v2","bearing_recipes_lavorazioni","bearing_recipes_v3","bearing_recipes_v4"];
-var fields=["codice","irTipo","irDiametro","orTipo","diametroSfera","numeroSfere","gabbiaTipo","grassoTipo","schermoTipo","pesoMin","pesoMax","classeGioco","giocoMin","giocoMax","disegnoUrl","serieGioco"];
+var fields=["codice","irTipo","irDiametro","orTipo","diametroSfera","numeroSfere","gabbiaTipo","grassoTipo","schermoTipo","pesoMin","pesoMax","classeGioco","giocoMin","giocoMax","disegnoUrl","serieGioco","orDiametro"];
 function readRecords(obj){
  if(Array.isArray(obj)) return obj;
  if(obj && Array.isArray(obj.lavorazioni)) return obj.lavorazioni;
@@ -77,7 +77,8 @@ function normalize(r){
  giocoMin:first(r,["giocoMin","clearanceMin"]),
  giocoMax:first(r,["giocoMax","clearanceMax"]),
  disegnoUrl:first(r,["disegnoUrl","imageUrl"]),
- serieGioco:first(r,["serieGioco","clearanceSeries"])
+ serieGioco:first(r,["serieGioco","clearanceSeries"]),
+ orDiametro:first(r,["orDiametro","orDiameter","outerDiameter"])
  };
 }
 function csvEsc(v){
