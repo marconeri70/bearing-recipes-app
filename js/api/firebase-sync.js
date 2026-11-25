@@ -40,7 +40,7 @@ export function plan(local,remote,base,pending){
  return "conflict";
 }
 export function installSync({getLocal,replaceLocal,canApply,download}){
- const auth=getAuth();let user=null,enabled=false,busy=false,queued=false,meta={base:{},deletes:{}},conflicts=[],heads=new Map(),timer=null;
+ const auth=getAuth();let user=null,enabled=false,busy=false,queued=false,meta={base:Object.create(null),deletes:Object.create(null)},conflicts=[],heads=new Map(),timer=null,deleting=0;
  const status=el("sync-status"),toggle=el("sync-toggle"),now=el("sync-now"),hist=el("sync-history"),badge=el("sync-badge"),confBox=el("sync-conflicts"),historyBox=el("sync-history-list");
  const metaKey=()=> "bearing_recipes_sync_v10_"+user.uid;
  function say(s,state="neutral"){status.textContent=s;badge.textContent=state==="ok"?"Cloud allineato":state==="error"?"Cloud da verificare":enabled?"Cloud attivo":"Solo locale";badge.dataset.state=state;}
@@ -65,9 +65,9 @@ export function installSync({getLocal,replaceLocal,canApply,download}){
    return {...v,id};
   });
  }
- function mark(k,h){meta.base[k]={rev:h.rev,hash:h.hash,deleted:!!h.deleted};delete meta.deletes[k];if(!store())throw Error("Stato locale non salvato.");}
+ function mark(k,h,uid){if(!active()||user.uid!==uid)throw Error("Sessione modificata: sincronizzazione sospesa.");meta.base[k]={rev:h.rev,hash:h.hash,deleted:!!h.deleted};delete meta.deletes[k];if(!store())throw Error("Stato locale non salvato.");}
  function apply(k,remote,expected){
-  if(!canApply())return false;
+  if(!active()||!canApply()||deleting)return false;
   const current=localMap().get(k);
   if((current?serial(current):null)!==(expected?serial(expected):null))return false;
   return replaceLocal(k,remote.deleted?null:recipe(remote.recipe));
@@ -92,35 +92,37 @@ export function installSync({getLocal,replaceLocal,canApply,download}){
  async function resolve(c,mode){
   if(busy||!active()||!canApply())return;
   if(!confirm("Confermi la scelta per "+c.k+"? Le versioni precedenti restano nello storico cloud; esporta prima il backup locale."))return;
-  busy=true;controls();
+  busy=true;controls();const uid=user.uid;
   try{
    const m=await loadHeads(),r=m.get(c.k),l=localMap().get(c.k);
+   if(!active()||user.uid!==uid)throw Error("Sessione modificata.");
    if(!r||r.rev!==c.remote.rev||r.hash!==c.remote.hash||(l?serial(l):null)!==(c.local?serial(c.local):null))throw Error("Le versioni sono cambiate: sincronizza di nuovo.");
-   if(mode==="remote"){if(!apply(c.k,r,l))throw Error("Chiudi la scheda di modifica e riprova.");mark(c.k,r);}
-   else {const saved=await commit(c.k,recipe(l),false,r);mark(c.k,saved);}
+   if(mode==="remote"){if(!apply(c.k,r,l))throw Error("Chiudi la scheda di modifica e riprova.");mark(c.k,r,uid);}
+   else {const saved=await commit(c.k,recipe(l),false,r);mark(c.k,saved,uid);}
    say("Conflitto risolto. Aggiorna la sincronizzazione.","ok");
   }catch(e){say(String(e.message||e),"error");}finally{busy=false;controls();schedule();}
  }
  async function sync(){
-  if(!active()||busy||!navigator.onLine||!canApply())return;
+  if(!active()||busy||deleting||!navigator.onLine||!canApply())return;
   busy=true;controls();conflicts=[];showConflicts();const uid=user.uid;
   try{
    heads=await loadHeads();if(!active()||user.uid!==uid)return;
    const keys=new Set([...heads.keys(),...localMap().keys(),...Object.keys(meta.deletes)]);
    let changed=0,issues=[];
    for(const k of keys){
-    if(!active()||user.uid!==uid||!canApply()){queued=true;break;}
+    if(!active()||user.uid!==uid||!canApply()||deleting){queued=true;break;}
     try{
      const l=localMap().get(k),r=heads.get(k),p=meta.deletes[k];
      const lh=l?{hash:await hash(serial(l))}:null;
+     if(!active()||user.uid!==uid||deleting||meta.deletes[k]!==p){queued=true;break;}
      const action=plan(lh,r,meta.base[k],p);
-     if(action==="mark"){mark(k,r);continue;}
+     if(action==="mark"){mark(k,r,uid);continue;}
      if(action==="push"){
-      const saved=await commit(k,recipe(l),false,r);heads.set(k,saved);mark(k,saved);changed++;
+      const saved=await commit(k,recipe(l),false,r);heads.set(k,saved);mark(k,saved,uid);changed++;
      }else if(action==="delete"){
-      const saved=await commit(k,recipe(r.recipe),true,r);heads.set(k,saved);mark(k,saved);changed++;
+      const saved=await commit(k,recipe(r.recipe),true,r);heads.set(k,saved);mark(k,saved,uid);changed++;
      }else if(action==="pull"||action==="pull-delete"){
-      if(apply(k,r,l)){mark(k,r);changed++;}else queued=true;
+      if(apply(k,r,l)){mark(k,r,uid);changed++;}else queued=true;
      }else if(action==="conflict"){conflicts.push({k,local:l,remote:r});}
      else if(!r&&!l&&p){delete meta.deletes[k];store();}
     }catch(e){issues.push(k+": "+String(e.message||e));}
@@ -132,8 +134,8 @@ export function installSync({getLocal,replaceLocal,canApply,download}){
  }
  function schedule(){if(!active())return;if(busy){queued=true;return;}clearTimeout(timer);timer=setTimeout(sync,500);}
  onAuthStateChanged(auth,u=>{
-  user=u?.emailVerified?u:null;enabled=false;meta={base:{},deletes:{}};heads=new Map();conflicts=[];confBox.replaceChildren();historyBox.replaceChildren();
-  if(user)try{const saved=JSON.parse(localStorage.getItem(metaKey())||"{}");meta={base:saved.base||{},deletes:saved.deletes||{}};enabled=saved.enabled===true;}catch{}
+  user=u?.emailVerified?u:null;enabled=false;meta={base:Object.create(null),deletes:Object.create(null)};heads=new Map();conflicts=[];confBox.replaceChildren();historyBox.replaceChildren();
+  if(user)try{const saved=JSON.parse(localStorage.getItem(metaKey())||"{}");meta={base:Object.assign(Object.create(null),saved.base||{}),deletes:Object.assign(Object.create(null),saved.deletes||{})};enabled=saved.enabled===true;}catch{}
   toggle.checked=enabled;controls();say(user?(enabled?"Sincronizzazione abilitata su questo dispositivo.":"Accesso effettuato. Attiva la sincronizzazione solo se autorizzato."):"Accedi con Google dal pannello Cloud.");
   if(active())schedule();
  });
@@ -162,11 +164,13 @@ export function installSync({getLocal,replaceLocal,canApply,download}){
     b.onclick=async()=>{
      if(busy||!active()||!canApply())return;
      if(!confirm("Ripristinare questa versione sul dispositivo e nel cloud? Le versioni precedenti restano nello storico."))return;
-     busy=true;controls();try{
+     busy=true;controls();const uid=user.uid;try{
       const m=await loadHeads(),current=m.get(k),l=localMap().get(k);
+      if(!active()||user.uid!==uid)throw Error("Sessione modificata.");
       if(!current)throw Error("Ricetta cloud non trovata.");
-      if(!apply(k,{recipe:v.recipe,deleted:false},l))throw Error("Ripristino locale non riuscito.");
-      const saved=await commit(k,recipe(v.recipe),false,current);heads.set(k,saved);mark(k,saved);say("Versione ripristinata.","ok");
+      const saved=await commit(k,recipe(v.recipe),false,current);heads.set(k,saved);
+      if(!active()||user.uid!==uid||!apply(k,saved,l))throw Error("Versione archiviata online; copia locale non aggiornata. Sincronizza di nuovo.");
+      mark(k,saved,uid);say("Versione ripristinata.","ok");
      }catch(e){say("Ripristino: "+String(e.message||e),"error");}finally{busy=false;controls();}
     };
     row.append(label,p,b);historyBox.append(row);
@@ -177,7 +181,7 @@ export function installSync({getLocal,replaceLocal,canApply,download}){
  window.addEventListener("online",schedule);
  return {changed:schedule,deleted:async r=>{
   if(!user||!enabled||!r)return;
-  const uid=user.uid,k=key(r.codice),h=await hash(serial(r));if(!active()||user.uid!==uid)return;
-  meta.deletes[k]=h;if(store())schedule();
+  const uid=user.uid,k=key(r.codice);deleting++;
+  try{const h=await hash(serial(r));if(!active()||user.uid!==uid)return;meta.deletes[k]=h;store();}finally{deleting--;schedule();}
  }};
 }
