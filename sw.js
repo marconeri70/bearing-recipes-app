@@ -1,7 +1,7 @@
 // sw.js - PWA Ricette Lavorazione Cuscinetti
 // Cache network-first per evitare che il telefono resti bloccato su vecchie versioni.
 
-const CACHE_NAME = 'bearing-recipes-v15-firebase-recovery';
+const CACHE_NAME = 'bearing-recipes-v16-dashboard-sync';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
   './js/api/cloud-client.js',
   './js/api/firebase-config.js',
   './js/api/firebase-recovery.js',
+  './js/api/firebase-sync.js',
   './js/api/csv-manager.js',
   './js/api/bearing-logic.js',
   './js/api/auth.js',
