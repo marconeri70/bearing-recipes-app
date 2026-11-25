@@ -357,37 +357,60 @@ async function showHistory(row){
 }
 
 
-function clearOCR(){$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";}
+function clearOCR(){$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
 function parseDrawingText(raw){
- const text=String(raw||"").slice(0,60000).replace(/\r/g,"");
- const results=[];
- const add=(key,value,evidence)=>{if(value!==null&&value!==undefined&&String(value).trim())results.push({key,value,evidence:String(evidence).slice(0,180)});};
- const unique=(key,re,transform=x=>x)=>{
-  const found=[...text.matchAll(re)].map(m=>({value:transform(m[1]),evidence:m[0]})).filter(x=>x.value!==null&&x.value!==undefined&&x.value!=="");
-  if(found.length&&new Set(found.map(x=>String(x.value).toUpperCase())).size===1)add(key,found[0].value,found[0].evidence);
+ const text=String(raw||"").slice(0,60000).replace(/\r/g,"").replace(/[‐‑‒–—]/g,"-");
+ const candidates=new Map();
+ const add=(key,value,evidence,review=false)=>{
+  if(value===null||value===undefined||!String(value).trim())return;
+  if(!candidates.has(key))candidates.set(key,[]);
+  candidates.get(key).push({key,value,evidence:String(evidence).replace(/\s+/g," ").slice(0,180),review});
+ };
+ const scan=(key,re,transform=x=>x,review=false)=>{
+  for(const m of text.matchAll(re))add(key,transform(m[1]),m[0],review);
  };
  const num=x=>numberValue(x);
- unique("irTipo",/\b(?:IR|INNER RING)\s*[:=-]?\s*(IR[- ][A-Z0-9-]{2,25})\b/gi);
- unique("orTipo",/\b(?:OR|OUTER RING)\s*[:=-]?\s*(OR[- ][A-Z0-9-]{2,25})\b/gi);
- unique("irDiametro",/\b(?:BORE(?: DIAMETER)?|FORO IR|IR DIAMETER)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,num);
- unique("orDiametro",/\b(?:OUTER DIAMETER|ESTERNO OR|OR DIAMETER)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,num);
- unique("classeGioco",/\b(?:RADIAL CLEARANCE|GIOCO RADIALE)\s*[:=.-]?\s*(C[2-5][LH]?|CN[LH]?)\b/gi,x=>x.toUpperCase());
- unique("grassoTipo",/\b(?:GREASE TYPE|TIPO GRASSO)\s*[:=.-]?\s*([A-Z0-9_-]{2,24})\b/gi,x=>x.toUpperCase());
- unique("diametroSfera",/\b(?:BALL DIAMETER|DIAMETRO SFERA)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,num);
- unique("numeroSfere",/\b(?:NUMBER OF BALLS|BALL COUNT|NUMERO SFERE)\s*[:=]?\s*(\d+)\b/gi,num);
- const weights=[...text.matchAll(/\b(?:GREASE QUANTITY|QUANTIT[ÀA] GRASSO)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(?:to|–|-|a)\s*(\d+(?:[.,]\d+)?)\s*g\b/gi)].map(m=>({min:num(m[1]),max:num(m[2]),ev:m[0]})).filter(m=>m.min!==null&&m.max!==null&&m.min<=m.max);
- if(weights.length&&new Set(weights.map(m=>m.min+"|"+m.max)).size===1){add("pesoMin",weights[0].min,weights[0].ev);add("pesoMax",weights[0].max,weights[0].ev);}
- return results;
+ const positive=x=>{const n=num(x);return n!==null&&n>0?n:null;};
+ const integer=x=>{const n=positive(x);return Number.isInteger(n)?n:null;};
+ const upper=x=>x.toUpperCase().replace(/\s*-\s*/g,"-");
+ scan("irTipo",/\b(?:IR|INNER\s+RING)\s*[:=|]?\s*(IR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\b/gi,upper);
+ scan("orTipo",/\b(?:OR|OUTER\s+RING)\s*[:=|]?\s*(OR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\b/gi,upper);
+ scan("irTipo",/^\s*(IR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\s*$/gim,upper,true);
+ scan("orTipo",/^\s*(OR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\s*$/gim,upper,true);
+ scan("irDiametro",/\b(?:BORE(?:\s+DIAMETER)?|FORO\s+IR|IR\s+DIAMETER)\s*[:=]?\s*[Ø⌀]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,positive);
+ scan("orDiametro",/\b(?:OUTER\s+DIAMETER|ESTERNO\s+OR|OR\s+DIAMETER)\s*[:=]?\s*[Ø⌀]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,positive);
+ scan("classeGioco",/\b(?:RADIAL\s+CLEARANCE|GIOCO\s+RADIALE)\s*[:=.-]?\s*(C[2-5][LH]?|CN[LH]?)\b/gi,x=>x.toUpperCase());
+ scan("classeGioco",/\b(?:RADIAL\s+CLEARANCE|GIOCO\s+RADIALE)\s*[:=.-]?\s*(C[2-5][LH]?|CN[LH]?)(?:Q@|Q©|Q®)(?=\s|$|[.,;])/gi,x=>x.toUpperCase(),true);
+ scan("grassoTipo",/\b(?:GREASE\s+TYPE|TIPO\s+GRASSO)\s*[:=.-]?\s*([A-Z0-9_-]{2,24})\b/gi,x=>x.toUpperCase());
+ scan("diametroSfera",/\b(?:BALL\s+DIAMETER|DIAMETRO\s+SFERA)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,positive);
+ scan("numeroSfere",/\b(?:NUMBER\s+OF\s+BALLS|BALL\s+COUNT|NUMERO\s+SFERE)\s*[:=]?\s*(\d+)\b/gi,integer);
+ // Distinta SKF: richiedi la descrizione e il codice RB sulla stessa riga o su quella successiva.
+ for(const m of text.matchAll(/(?:^|\n)[ \t]*(?:(\d{1,3})[ \t|]+)?BALL[ \t|:=-]*(?:\n[ \t]*)?RB[ \t]*-[ \t]*(\d+[.,]\d+)(?=[ \t|\n]|$)/gi)){
+  add("diametroSfera",positive(m[2]),m[0],true);if(m[1])add("numeroSfere",integer(m[1]),m[0],true);
+ }
+ scan("gabbiaTipo",/(?:^|\n)[ \t]*(?:\d+[ \t|]+)?CAGE[ \t|:=-]*(?:\n[ \t]*)?((?:CA|CG|C)\s*-\s*[A-Z0-9]+(?:[- ][A-Z0-9]+){0,2})(?=[ \t|\n]|$)/gi,upper,true);
+ scan("schermoTipo",/(?:^|\n)[ \t]*(?:\d+[ \t|]+)?(?:SEAL|SHIELD)[ \t|:=-]*(?:\n[ \t]*)?((?:SR|SH|Z)\s*-\s*[A-Z0-9]+(?:[- ][A-Z0-9]+){0,2})(?=[ \t|\n]|$)/gi,upper,true);
+ const weights=[...text.matchAll(/\b(?:GREASE\s+QUANTITY|QUANTIT[ÀA]\s+GRASSO)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(?:to|-|a)\s*(\d+(?:[.,]\d+)?)\s*g\b/gi)].map(m=>({min:num(m[1]),max:num(m[2]),ev:m[0]})).filter(m=>m.min!==null&&m.max!==null&&m.min<=m.max);
+ for(const w of weights){add("pesoMin",w.min,w.ev);add("pesoMax",w.max,w.ev);}
+ const results=[], conflicts=[];
+ for(const [key,items] of candidates){
+  if(new Set(items.map(x=>String(x.value).toUpperCase())).size!==1){conflicts.push(key);continue;}
+  results.push(items.find(x=>!x.review)||items[0]);
+ }
+ return {items:results,conflicts};
 }
 function renderOCR(){
  const result=$("ocr-result");result.replaceChildren();
- const items=parseDrawingText($("ocr-text").value);
- if(!items.length){result.textContent="Nessun dato con etichetta esplicita riconosciuto. Controlla il disegno e completa manualmente.";return;}
- result.append(element("strong","Proposte da verificare: "+items.length));
+ const {items,conflicts}=parseDrawingText($("ocr-text").value);
+ if(conflicts.length)result.append(element("p","Letture discordanti, escluse: "+conflicts.map(k=>fieldLabels[k]||k).join(", "),"ocr-review"));
+ if(!items.length){result.append(element("p","Nessun dato univoco riconosciuto. Prova la modalità distinta o quote, oppure completa manualmente."));return;}
+ const isSame=item=>{const v=$("ed-"+item.key)?.value??"";return numericFields.has(item.key)?v.trim()!==""&&numberValue(v)===item.value:String(v).trim().toUpperCase()===String(item.value).toUpperCase();};
+ items.sort((a,b)=>Number(isSame(a))-Number(isSame(b)));
+ result.append(element("strong","Proposte da verificare: "+items.length),element("p",items.filter(x=>!isSame(x)).length+" nuove o diverse · "+items.filter(isSame).length+" già presenti","ocr-note"));
  const checks=[];
  for(const item of items){
   const l=element("label"),cb=element("input");cb.type="checkbox";const current=$("ed-"+item.key)?.value;
-  const content=element("span",fieldLabels[item.key]+": "+item.value+(current?" (attuale: "+current+")":""));content.append(element("small",item.evidence));l.append(cb,content);result.append(l);checks.push([cb,item]);
+  const content=element("span",fieldLabels[item.key]+": "+item.value+(isSame(item)?" · già presente":current?" (attuale: "+current+")":" · da compilare"));content.append(element("small",item.evidence,"ocr-evidence"));if(item.review)content.append(element("small","Lettura incerta o da distinta: controlla sul disegno originale.","ocr-review"));l.append(cb,content);result.append(l);checks.push([cb,item]);
  }
  const apply=element("button","Applica solo i campi selezionati");apply.type="button";apply.className="secondary";apply.onclick=()=>{
   if(!draft||busy)return;const chosen=checks.filter(([cb])=>cb.checked);if(!chosen.length||!confirm("Applicare "+chosen.length+" valori verificati? Nessun dato sarà salvato prima della conferma della ricetta."))return;
@@ -407,7 +430,23 @@ function loadOcrLibrary(){
  }).catch(e=>{ocrLibraryPromise=null;throw e;});
  return ocrLibraryPromise;
 }
-async function readLocalOCR(file){
+async function prepareOCRImage(file,mode){
+ if(mode==="full")return file;
+ const bitmap=await createImageBitmap(file);
+ try{
+  const canvas=document.createElement("canvas");
+  const w=bitmap.width,h=bitmap.height;
+  const rotated=mode==="rotated",top=mode==="table"?Math.floor(h*.48):0,height=mode==="table"?h-top:mode==="dimensions"?Math.ceil(h*.65):h;
+  const ratio=Math.min(1,2400/Math.max(w,height));
+  canvas.width=Math.max(1,Math.round((rotated?height:w)*ratio));canvas.height=Math.max(1,Math.round((rotated?w:height)*ratio));
+  const ctx=canvas.getContext("2d");if(!ctx)throw Error("Preparazione immagine non riuscita.");
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(rotated){ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(bitmap,0,top,w,height,0,0,canvas.height,canvas.width);}
+  else ctx.drawImage(bitmap,0,top,w,height,0,0,canvas.width,canvas.height);
+  return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error("Immagine non disponibile.")),"image/png"));
+ }finally{bitmap.close();}
+}
+async function readLocalOCR(file,mode){
  const T=await loadOcrLibrary(),root=new URL("./vendor/ocr/",document.baseURI);
  const bar=$("ocr-progress"),message=$("ocr-progress-text");
  bar.hidden=false;bar.value=0;message.textContent="Preparazione del motore OCR…";
@@ -417,8 +456,9 @@ async function readLocalOCR(file){
    const w=await T.createWorker("eng",1,{workerPath:new URL("worker.min.js",root).href,corePath:new URL("core/",root).href,langPath:new URL("lang/",root).href,workerBlobURL:false,cacheMethod:"none",gzip:true,
     logger:m=>{if(finished)return;const p=Number(m.progress);bar.value=Number.isFinite(p)?Math.round(Math.max(0,Math.min(1,p))*100):0;message.textContent=m.status==="recognizing text"?"Riconoscimento testo: "+bar.value+"%":"Preparazione OCR: "+bar.value+"%";}});
    if(finished){await w.terminate();throw Error("OCR interrotto.");}worker=w;
-   await worker.setParameters({tessedit_pageseg_mode:"11"});
-   const ret=await worker.recognize(file);
+   await worker.setParameters({tessedit_pageseg_mode:mode==="table"?"6":"11",preserve_interword_spaces:"1"});
+   const prepared=await prepareOCRImage(file,mode);
+   const ret=await worker.recognize(prepared);
    return String(ret?.data?.text||"").trim();
   })();
   return await Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Riconoscimento troppo lungo. Riprova con una fotografia più nitida o ritagliata.")),180000);})]);
@@ -432,10 +472,12 @@ $("ocr-read").onclick=()=>action(async()=>{
   if(!file&&keyPattern.test(draft.base.disegnoR2Key||""))file=await(await request("/api/photos?key="+encodeURIComponent(draft.base.disegnoR2Key))).blob();
   if(!file)throw Error("Seleziona una foto o una ricetta con disegno R2.");
   if(!/^image\/(jpeg|png|webp)$/.test(file.type)||!file.size||file.size>8*1024*1024)throw Error("Foto non valida.");
-  const text=await readLocalOCR(file);
+  const mode=$("ocr-mode").value;
+  const text=await readLocalOCR(file,mode);
   if(!text)throw Error("Nessun testo riconosciuto. Prova con una foto più nitida.");
   if(!draft||!connected)return;
-  $("ocr-text").value=text;renderOCR();
+  const previous=$("ocr-text").value.trim();
+  $("ocr-text").value=mode==="full"?text:[previous,text].filter(Boolean).join("\n\n").slice(0,60000);renderOCR();
  }catch(e){output.textContent=e.message;throw e;}
  finally{$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
 });
