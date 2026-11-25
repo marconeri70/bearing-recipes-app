@@ -35,6 +35,7 @@ async function loadRemote(){
 function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
+ $("editor-cancel").disabled=busy;
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
 }
 function button(text,fn,blocked=false){const b=element("button",text);b.type="button";b.dataset.action="1";b.dataset.blocked=String(blocked);b.onclick=fn;return b;}
@@ -57,10 +58,19 @@ function render(){
   box.append(b);localList.append(box);
  }
  if(connected&&!remote.length)remoteList.append(element("p","Archivio Cloudflare vuoto."));
- for(const row of remote){
+ renderCloudCatalog();
+ syncControls();
+}
+function renderCloudCatalog(){
+ const remoteList=$("remotes");remoteList.replaceChildren();
+ const query=$("cloud-search").value.trim().toLowerCase(), ir=$("cloud-ir").value.trim(), or=$("cloud-or").value.trim();
+ const rows=remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or));
+ $("cloud-filter-count").textContent=connected?rows.length+" ricette trovate":"Collega l’archivio per visualizzare le ricette.";
+ for(const row of rows){
   const r=row.recipe||{},box=element("article");box.append(element("strong",r.codice||row.code),element("small","Versione "+row.revision+(row.deleted?" · eliminata":" · attiva")),element("p","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm · "+(r.classeGioco||"—")));
   if(keyPattern.test(r.disegnoR2Key||""))box.append(button("Apri foto privata",()=>showPhoto(r)));
   else box.append(element("small",r.disegnoUrl?"Solo collegamento esterno: foto non archiviata in R2.":"Nessun disegno R2."));
+  box.append(button("Modifica ricetta / foto",()=>openEditor(row)));
   const detail=element("details"),summary=element("summary","Dati tecnici");detail.append(summary);
   for(const [k,v] of Object.entries(r)){if(k==="disegnoUrl"||k==="disegnoR2Key")continue;detail.append(element("p",k+": "+String(v)));}
   box.append(detail);remoteList.append(box);
@@ -101,7 +111,7 @@ $("login").onclick=()=>action(async()=>{
  if(token.length<32||token.length>128){token="";throw Error("Inserisci la chiave amministratore creata su GitHub, non il token Cloudflare.");}
  try{const check=await json("/api/check");if(!check.database||!check.photos)throw Error("Verifica archivi non riuscita.");await loadRemote();connected=true;render();status("Archivio Cloudflare collegato. Nessuna ricetta modificata.");}catch(e){token="";connected=false;remote=[];render();throw e;}
 });
-$("logout").onclick=()=>{token="";connected=false;remote=[];photoClear();render();status("Disconnesso.");};
+$("logout").onclick=()=>{if(draft&&!confirm("Disconnettere e abbandonare la scheda non salvata?"))return;closeEditor();token="";connected=false;remote=[];photoClear();render();status("Disconnesso.");};
 $("refresh").onclick=()=>action(async()=>{await loadRemote();render();status("Archivio aggiornato.");});
 function toData(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
 $("cloud-backup").onclick=()=>action(async()=>{
@@ -116,5 +126,84 @@ $("cloud-backup").onclick=()=>action(async()=>{
  download({formato:"bearing-recipes-cloudflare-backup",versione:11,creatoIl:new Date().toISOString(),ricette:recipes,foto:photos},"backup-cloudflare-ricette-"+filename()+".json");
  status("Backup delle ricette attive e dei relativi file R2 creato. I link esterni non sono inclusi come immagini.");
 });
-window.addEventListener("pagehide",()=>{token="";photoClear();});
+
+const numericFields=new Set(["irDiametro","orDiametro","diametroSfera","numeroSfere","pesoMin","pesoMax","giocoMin","giocoMax"]);
+const fieldLabels={codice:"Codice lavorazione",irTipo:"Tipo IR",irDiametro:"Foro IR (mm)",orTipo:"Tipo OR",orDiametro:"Esterno OR (mm)",diametroSfera:"Diametro sfera (mm)",numeroSfere:"Numero sfere",gabbiaTipo:"Gabbia",grassoTipo:"Grasso",schermoTipo:"Schermo",pesoMin:"Peso minimo (g)",pesoMax:"Peso massimo (g)",classeGioco:"Classe gioco",serieGioco:"Riferimento SKF (serie)",giocoMin:"Gioco minimo (µm)",giocoMax:"Gioco massimo (µm)"};
+let draft=null,editorFile=null;
+function numberValue(x){
+ const v=String(x??"").trim();
+ if(!v||!/^\d+(?:[.,]\d+)?$/.test(v))return null;
+ const n=Number(v.replace(",","."));return Number.isFinite(n)?n:null;
+}
+function matchesCloud(r,q,ir,or){
+ const has=(k,v)=>!v||(numberValue(v)!==null&&numberValue(v)>0&&numberValue(r[k])===numberValue(v));
+ return (!q||[r.codice,r.irTipo,r.orTipo,r.classeGioco].some(v=>String(v??"").toLowerCase().includes(q)))&&has("irDiametro",ir)&&has("orDiametro",or);
+}
+function closeEditor(){
+ draft=null;editorFile=null;$("editor-form").reset();$("editor-file-status").textContent="";$("editor-status").textContent="";$("cloud-editor").hidden=true;
+}
+function openEditor(row=null){
+ if(!connected||busy)return;
+ if(draft&&!confirm("Abbandonare le modifiche non salvate?"))return;
+ photoClear();draft={row,base:row?{...row.recipe}:{}};
+ editorFile=null;$("editor-form").reset();$("editor-fields").replaceChildren();$("editor-status").textContent="";$("editor-file-status").textContent="";
+ $("editor-title").textContent=row?"Modifica "+row.recipe.codice:"Nuova ricetta cloud";
+ $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":"Nuovo codice nell’archivio online";
+ for(const k of fields){
+  const label=element("label",fieldLabels[k]||k,k==="codice"?"wide":"");
+  const input=element("input");input.id="ed-"+k;input.value=draft.base[k]??"";input.maxLength=k==="codice"?200:4000;
+  if(k==="codice"){input.required=true;input.readOnly=!!row;}
+  if(numericFields.has(k))input.inputMode="decimal";
+  if(k==="serieGioco")input.placeholder="storica / BCG02 / BCG04 / BCG06";
+  label.append(input);$("editor-fields").append(label);
+ }
+ $("editor-drawing").textContent=draft.base.disegnoR2Key?"Disegno privato R2 presente.":draft.base.disegnoUrl?"Vecchio link presente. Seleziona una foto per sostituirlo con il file R2.":"Nessun disegno associato.";
+ $("cloud-editor").hidden=false;$("cloud-editor").scrollIntoView({block:"start"});syncControls();
+}
+function chooseEditorFile(f){
+ if(!draft||busy||!f)return;
+ if(!/^image\/(jpeg|png|webp)$/.test(f.type)||!f.size||f.size>8*1024*1024){$("editor-file").value="";$("editor-capture").value="";editorFile=null;$("editor-file-status").textContent="Formato non valido: JPG, PNG, WebP, fino a 8 MB.";return;}
+ editorFile=f;$("editor-file-status").textContent="Foto selezionata: "+f.name+". Verrà caricata al salvataggio.";
+}
+async function saveEditor(event){
+ event.preventDefault();if(!draft||busy||!connected)return;
+ const current=draft, file=editorFile, recipe={};
+ $("editor-status").textContent="";
+ try{
+  for(const k of fields){
+   const v=$("ed-"+k).value.trim();if(!v)continue;
+   if(numericFields.has(k)){const n=numberValue(v);if(n===null||(["irDiametro","orDiametro","diametroSfera","numeroSfere"].includes(k)&&n<=0)||(k==="numeroSfere"&&!Number.isInteger(n)))throw Error("Controlla "+fieldLabels[k]+".");recipe[k]=n;}
+   else recipe[k]=v;
+  }
+  if(!code(recipe))throw Error("Inserisci il codice.");
+  if(recipe.giocoMin!=null&&recipe.giocoMax!=null&&recipe.giocoMin>recipe.giocoMax)throw Error("Gioco minimo superiore al massimo.");
+  if(recipe.pesoMin!=null&&recipe.pesoMax!=null&&recipe.pesoMin>recipe.pesoMax)throw Error("Peso minimo superiore al massimo.");
+  for(const k of ["disegnoUrl","disegnoR2Key"])if(current.base[k])recipe[k]=current.base[k];
+ }catch(e){$("editor-status").textContent=e.message;return;}
+ if(!confirm("Salvare "+recipe.codice+" nell’archivio Cloudflare? Conferma solo se autorizzato dall’azienda. La versione precedente resta nello storico."))return;
+ await action(async()=>{
+  $("editor-form").inert=true;
+  try{
+   await loadRemote();
+   const existing=remote.find(r=>r.code===code(recipe)),revision=current.row?.revision??0;
+   if((existing?.revision??0)!==revision||existing?.deleted)throw Error("Il codice esiste già o la versione è cambiata. Nessuna sovrascrittura: aggiorna e riapri la scheda.");
+   if(file){$("editor-status").textContent="Caricamento e verifica della foto...";recipe.disegnoR2Key=await upload(file);delete recipe.disegnoUrl;}
+   $("editor-status").textContent="Salvataggio ricetta...";
+   const saved=await json("/api/recipes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipe,expectedRevision:revision,deleted:false})});
+   if(saved.code!==code(recipe)||saved.revision!==revision+1)throw Error("Salvataggio non verificato. Aggiorna il catalogo prima di riprovare.");
+   await loadRemote();
+   if(!remote.some(r=>r.code===saved.code&&r.revision===saved.revision&&!r.deleted))throw Error("Rilettura non riuscita. Aggiorna il catalogo.");
+   closeEditor();render();status("Ricetta "+recipe.codice+" salvata e riletta su Cloudflare.");$("cloud-catalog").scrollIntoView({block:"start"});
+  }catch(e){$("editor-status").textContent=e.message;throw e;}finally{$("editor-form").inert=false;}
+ });
+}
+$("new-cloud").onclick=()=>openEditor();
+for(const id of ["cloud-search","cloud-ir","cloud-or"])$(id).addEventListener("input",renderCloudCatalog);
+$("editor-file").onchange=e=>chooseEditorFile(e.target.files[0]);
+$("editor-capture").onchange=e=>chooseEditorFile(e.target.files[0]);
+$("editor-camera").onclick=()=>$("editor-capture").click();
+$("editor-cancel").onclick=()=>{if(!busy&&confirm("Chiudere senza salvare?"))closeEditor();};
+$("editor-form").onsubmit=saveEditor;
+
+window.addEventListener("pagehide",()=>{token="";connected=false;remote=[];closeEditor();photoClear();render();});
 readLocal();render();
