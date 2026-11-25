@@ -51,8 +51,29 @@
             <option value="">Tutte le classi</option>
           </select>
         </div>
+        <details id="firebase-panel" class="firebase-panel" open>
+          <summary>☁️ Archivio Firebase · recupero e backup v9</summary>
+          <p id="firebase-status" role="status" aria-live="polite">Preparazione accesso Google...</p>
+          <div class="firebase-actions">
+            <button id="firebase-login" type="button" class="btn btn-primary" disabled>Accedi con Google</button>
+            <button id="firebase-logout" type="button" class="btn btn-light" disabled>Esci</button>
+            <button id="firebase-read" type="button" class="btn btn-secondary" disabled>Recupera originali</button>
+            <button id="firebase-backup" type="button" class="btn btn-light" disabled>Scarica backup Firebase</button>
+            <button id="firebase-import-selected" type="button" class="btn btn-primary" disabled>Importa selezionate</button>
+          </div>
+          <div id="firebase-records" class="firebase-records"></div>
+          <p class="note">I due archivi originali sono in sola lettura. Se ci sono più versioni dello stesso codice, selezionane una. I codici locali già presenti non vengono sostituiti.</p>
+          <details>
+            <summary>Archivio online v9 (opzionale)</summary>
+            <p class="note">Richiede una regola Firestore dedicata. Copia manuale tra dispositivi, con versioni immutabili; nessuna cancellazione o sincronizzazione distruttiva. Non caricare dati aziendali senza autorizzazione.</p>
+            <div class="firebase-actions">
+              <button id="firebase-push" type="button" class="btn btn-secondary" disabled>Archivia copie online</button>
+              <button id="firebase-read-archive" type="button" class="btn btn-light" disabled>Leggi archivio v9</button>
+            </div>
+          </details>
+        </details>
         <div id="lista-lavorazioni" class="lista-lavorazioni"></div>
-        <p class="note">Le ricette sono salvate su questo dispositivo. Fai un backup JSON prima di cancellare dati o reinstallare: il cloud riguarda le foto, non ancora l'intero archivio.</p>
+        <p class="note">Le copie locali restano su questo dispositivo. Puoi recuperare gli originali da Firebase e scaricare un backup JSON. L’archivio online v9 è opzionale e non sincronizza automaticamente.</p>
       </section>
 
       <section class="form-section">
