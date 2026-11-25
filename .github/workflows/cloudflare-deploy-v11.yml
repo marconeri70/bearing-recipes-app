@@ -64,39 +64,59 @@ jobs:
           custom=api(prefix+"/r2/buckets/"+bucket+"/domains/custom",eu=True)
           if managed.get("enabled") is not False or custom.get("domains")!=[]: raise SystemExit("R2 non privato: interrompo.")
           scripts=api(prefix+"/workers/scripts")
-          if any(s.get("id")==name or s.get("name")==name for s in scripts): raise SystemExit("Worker omonimo già esistente: non sovrascrivo.")
+          existing = any(s.get("id")==name or s.get("name")==name for s in scripts)
+          if existing:
+              print("Worker dedicato presente: nessuna sovrascrittura. Verifico solo il servizio esistente.")
           sub=api(prefix+"/workers/subdomain")["subdomain"]
           if not re.fullmatch(r"[a-z0-9-]+",sub): raise SystemExit("Sottodominio non valido.")
-          schema=pathlib.Path("cloudflare/v11-schema.sql").read_text()
-          query=api(prefix+"/d1/database/"+db+"/query","POST",{"sql":schema})
-          if not isinstance(query,list) or not all(q.get("success") for q in query): raise SystemExit("Schema non verificato.")
-          metadata={"main_module":"worker.mjs","compatibility_date":"2026-11-25","bindings":[{"type":"d1","name":"DB","database_id":db},{"type":"r2_bucket","name":"PHOTOS","bucket_name":bucket,"jurisdiction":"eu"},{"type":"secret_text","name":"RECIPES_ADMIN_TOKEN","text":admin}],"observability":{"enabled":False}}
-          boundary="cf"+secrets.token_hex(16)
-          parts=[]
-          def part(field,content,mime,filename=None):
-              disposition='Content-Disposition: form-data; name="'+field+'"'
-              if filename: disposition+='; filename="'+filename+'"'
-              parts.append(("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+mime+"\r\n\r\n").encode()+content+b"\r\n")
-          part("metadata",json.dumps(metadata).encode(),"application/json")
-          part("worker.mjs",pathlib.Path("cloudflare/v11-worker.mjs").read_bytes(),"application/javascript+module","worker.mjs")
-          payload=b"".join(parts)+("--"+boundary+"--\r\n").encode()
-          api(prefix+"/workers/scripts/"+name,"PUT",multipart=(boundary,payload))
-          api(prefix+"/workers/scripts/"+name+"/subdomain","POST",{"enabled":True,"previews_enabled":False})
+          if not existing:
+              schema=pathlib.Path("cloudflare/v11-schema.sql").read_text()
+              query=api(prefix+"/d1/database/"+db+"/query","POST",{"sql":schema})
+              if not isinstance(query,list) or not all(q.get("success") for q in query): raise SystemExit("Schema non verificato.")
+              metadata={"main_module":"worker.mjs","compatibility_date":"2026-11-25","bindings":[{"type":"d1","name":"DB","database_id":db},{"type":"r2_bucket","name":"PHOTOS","bucket_name":bucket,"jurisdiction":"eu"},{"type":"secret_text","name":"RECIPES_ADMIN_TOKEN","text":admin}],"observability":{"enabled":False}}
+              boundary="cf"+secrets.token_hex(16)
+              parts=[]
+              def part(field,content,mime,filename=None):
+                  disposition='Content-Disposition: form-data; name="'+field+'"'
+                  if filename: disposition+='; filename="'+filename+'"'
+                  parts.append(("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+mime+"\r\n\r\n").encode()+content+b"\r\n")
+              part("metadata",json.dumps(metadata).encode(),"application/json")
+              part("worker.mjs",pathlib.Path("cloudflare/v11-worker.mjs").read_bytes(),"application/javascript+module","worker.mjs")
+              payload=b"".join(parts)+("--"+boundary+"--\r\n").encode()
+              api(prefix+"/workers/scripts/"+name,"PUT",multipart=(boundary,payload))
+              api(prefix+"/workers/scripts/"+name+"/subdomain","POST",{"enabled":True,"previews_enabled":False})
           endpoint="https://"+name+"."+sub+".workers.dev"
+          state=api(prefix+"/workers/scripts/"+name+"/subdomain")
+          print("Indirizzo del Worker: "+endpoint)
+          print("workers.dev abilitato: "+str(state.get("enabled") is True))
+          if state.get("enabled") is not True:
+              raise SystemExit("Sottodominio del Worker disabilitato. Nessuna modifica eseguita sul Worker esistente.")
+          import http.client
           def check(path,authorized=False):
-              headers={"Authorization":"Bearer "+admin} if authorized else {}
+              conn=http.client.HTTPSConnection(name+"."+sub+".workers.dev",timeout=15)
               try:
-                  with urllib.request.urlopen(urllib.request.Request(endpoint+path,headers=headers),timeout=15) as r: return r.status,json.load(r)
-              except urllib.error.HTTPError as e: return e.code,{}
-              except urllib.error.URLError: return 0,{}
-          for _ in range(6):
+                  headers={"Authorization":"Bearer "+admin,"Accept":"application/json"} if authorized else {"Accept":"application/json"}
+                  conn.request("GET",path,headers=headers)
+                  r=conn.getresponse()
+                  raw=r.read(65536)
+                  try: data=json.loads(raw)
+                  except (ValueError,UnicodeError): data={}
+                  return r.status,data if isinstance(data,dict) else {}
+              except (OSError,http.client.HTTPException) as e:
+                  print("Errore di connessione: "+type(e).__name__)
+                  return 0,{}
+              finally: conn.close()
+          for i in range(4):
               status,health=check("/health")
-              if status==200 and health.get("service")==name: break
+              print("Controllo /health "+str(i+1)+": HTTP "+str(status))
+              if status==200 and health.get("service")==name and health.get("version")==1: break
               time.sleep(5)
-          else: raise SystemExit("Worker creato; endpoint non ancora verificato. Non rilanciare senza controllo.")
+          else: raise SystemExit("Endpoint non verificato: controllare stato e routing workers.dev. Nessuna sovrascrittura.")
           status,_=check("/api/recipes")
+          print("Accesso anonimo: HTTP "+str(status)+" (atteso 401)")
           if status!=401: raise SystemExit("Verifica accesso anonimo fallita.")
           status,data=check("/api/check",True)
+          print("Accesso autenticato: HTTP "+str(status))
           if status!=200 or data!={"database":True,"photos":True}: raise SystemExit("Collegamenti D1/R2 non verificati.")
           print("Worker dedicato attivo: "+endpoint)
           print("Accesso anonimo negato; D1 e R2 autenticati verificati.")
