@@ -46,6 +46,7 @@ function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
  $("editor-cancel").disabled=busy;
+ $("vision-consent").disabled=busy;$("vision-read").disabled=busy||!connected||!draft||!$("vision-consent").checked;
  $("ocr-region-load").disabled=busy;$("ocr-region-reset").disabled=busy;$("ocr-mode").disabled=busy;$("ocr-region-target").disabled=busy;
  $("restore-file").disabled=busy||!connected;$("restore-preview").disabled=busy||!connected||!$("restore-file").files.length;$("restore-run").disabled=busy||!connected||!restorePlan?.length;$("restore-clear").disabled=busy;
  $("skf-apply").disabled=busy||!skfProposal||!draft;
@@ -436,7 +437,7 @@ async function showHistory(row){
 }
 
 
-function clearOCR(){clearOCRRegion();$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
+function clearOCR(){$("vision-consent").checked=false;$("vision-status").textContent="";clearOCRRegion();$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
 function parseDrawingText(raw){
  const text=String(raw||"").slice(0,60000).replace(/\r/g,"").replace(/[‐‑‒–—]/g,"-");
  const candidates=new Map();
@@ -651,6 +652,50 @@ $("ocr-read").onclick=()=>action(async()=>{
  }catch(e){output.textContent=e.message;throw e;}
  finally{$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
 });
+
+$("vision-consent").onchange=syncControls;
+async function visionJpeg(file,mode){
+ const prepared=mode==="region"?file:await prepareOCRImage(file,mode);
+ const bitmap=await createImageBitmap(prepared);
+ try{
+  const c=document.createElement("canvas"),ratio=Math.min(1,2200/Math.max(bitmap.width,bitmap.height));c.width=Math.max(1,Math.round(bitmap.width*ratio));c.height=Math.max(1,Math.round(bitmap.height*ratio));
+  const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(bitmap,0,0,c.width,c.height);
+  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error("Preparazione immagine fallita.")),"image/jpeg",.88));
+  if(blob.size>3*1024*1024)throw Error("Immagine IA troppo grande: seleziona una zona più piccola.");
+  return blob;
+ }finally{bitmap.close();}
+}
+$("vision-read").onclick=()=>{
+ if(!draft||busy||!connected||!$("vision-consent").checked)return;
+ const mode=$("ocr-mode").value,target=mode==="region"?$("ocr-region-target").value:"";
+ if(!confirm("Inviare "+(mode==="region"?"solo il ritaglio selezionato":mode==="full"?"il disegno completo":"la zona di lettura scelta")+" a Cloudflare Workers AI? Conferma soltanto se autorizzato dall’azienda."))return;
+ $("vision-consent").checked=false;
+ const current=draft;
+ action(async()=>{
+  const out=$("vision-status");out.textContent="Controllo disponibilità Workers AI…";
+  $("ocr-result").replaceChildren();$("ocr-text").value="";$("ocr-read").disabled=true;$("ocr-suggest").disabled=true;
+  const controller=new AbortController();let timer;
+  try{
+   const health=await fetch(API+"/health",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal}).then(r=>r.json());
+   if(health.vision!==true)throw Error("Motore IA non ancora attivo: esegui il workflow V12.4.");
+   const file=mode==="region"?await cropOCRRegion():await getOCRFile();
+   const body=await visionJpeg(file,mode);
+   if(draft!==current||!connected)return;
+   out.textContent="Analisi visiva in corso…";
+   timer=setTimeout(()=>controller.abort(),110000);
+   const data=await json("/api/vision?consent=1&target="+encodeURIComponent(target||"all"),{method:"POST",headers:{"Content-Type":"image/jpeg"},body,signal:controller.signal});
+   if(draft!==current||!connected)return;
+   if(!Array.isArray(data.items)||!Array.isArray(data.conflicts))throw Error("Risposta IA non valida.");
+   const items=data.items.filter(x=>fields.includes(x.key)&&x.key!=="codice"&&x.key!=="serieGioco"&&x.key!=="giocoMin"&&x.key!=="giocoMax"&&$("ed-"+x.key)).map(x=>({...x,review:true}));
+   out.textContent="Risultato IA: "+items.length+" proposte da controllare. Tentativi residui oggi: "+data.remaining+".";
+   if(!items.length){$("ocr-result").textContent="Nessun campo sufficientemente leggibile. Seleziona un ritaglio più preciso oppure usa OCR locale.";return;}
+   $("ocr-text").value=items.map(x=>x.key+": "+x.value+" | "+x.evidence).join("\n");
+   renderOCR({items,conflicts:data.conflicts});
+  }catch(e){if(draft===current)out.textContent=e.name==="AbortError"?"Tempo massimo superato; l’analisi può essere conteggiata.":e.message;}
+  finally{clearTimeout(timer);$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
+ });
+};
+
 function closeEditor(){clearOCR();
  draft=null;editorFile=null;$("editor-form").reset();$("editor-file-status").textContent="";$("editor-status").textContent="";$("cloud-editor").hidden=true;
 }

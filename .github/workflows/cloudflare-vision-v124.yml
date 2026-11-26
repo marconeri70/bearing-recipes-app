@@ -1,0 +1,119 @@
+name: Cloudflare - attiva IA visiva V12.4
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-ricette-infrastructure
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      RECIPES_ADMIN_TOKEN: ${{ secrets.SKF_RECIPES_ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Aggiornamento controllato del Worker ricette
+        shell: python
+        run: |
+          import os, json, urllib.request, urllib.error, pathlib, secrets, re, time
+          token = os.environ.get("CF_TOKEN","")
+          admin = os.environ.get("RECIPES_ADMIN_TOKEN","")
+          if not token:
+              raise SystemExit("CLOUDFLARE_API_TOKEN assente.")
+          if not admin:
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN assente.")
+          if len(admin) < 32:
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN troppo corto: minimo 32 caratteri.")
+          if len(admin) > 128:
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN troppo lungo: massimo 128 caratteri.")
+          if not all(33 <= ord(c) <= 126 for c in admin):
+              raise SystemExit("SKF_RECIPES_ADMIN_TOKEN contiene spazi, caratteri di controllo o caratteri non ASCII. Usa una chiave casuale senza spazi.")
+          if admin == token:
+              raise SystemExit("Le due chiavi devono essere differenti.")
+          print("Controllo dei segreti superato.")
+          name = "skf-ricette-api"
+          bucket = "skf-ricette-foto"
+          def api(path, method="GET", payload=None, eu=False, multipart=None):
+              headers={"Authorization":"Bearer "+token,"Accept":"application/json"}
+              if eu: headers["cf-r2-jurisdiction"]="eu"
+              data=None
+              if payload is not None:
+                  data=json.dumps(payload).encode()
+                  headers["Content-Type"]="application/json"
+              if multipart is not None:
+                  boundary,data=multipart
+                  headers["Content-Type"]="multipart/form-data; boundary="+boundary
+              req=urllib.request.Request("https://api.cloudflare.com/client/v4"+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=45) as response: result=json.load(response)
+              except urllib.error.HTTPError as e:
+                  raise SystemExit("API Cloudflare HTTP %s: operazione interrotta." % e.code)
+              if not result.get("success"): raise SystemExit("Operazione Cloudflare rifiutata.")
+              return result.get("result")
+          accounts=api("/accounts?per_page=50")
+          if not isinstance(accounts,list) or len(accounts)!=1: raise SystemExit("Account non univoco.")
+          prefix="/accounts/"+accounts[0]["id"]
+          dbs=api(prefix+"/d1/database?name=skf-ricette-db&per_page=100")
+          dbs=[d for d in dbs if d.get("name")=="skf-ricette-db" and d.get("jurisdiction")=="eu"]
+          if len(dbs)!=1: raise SystemExit("D1 UE non trovato.")
+          db=dbs[0]["uuid"]
+          managed=api(prefix+"/r2/buckets/"+bucket+"/domains/managed",eu=True)
+          custom=api(prefix+"/r2/buckets/"+bucket+"/domains/custom",eu=True)
+          if managed.get("enabled") is not False or custom.get("domains")!=[]: raise SystemExit("R2 non privato: interrompo.")
+          scripts=api(prefix+"/workers/scripts")
+          if not any(s.get("id")==name or s.get("name")==name for s in scripts): raise SystemExit("Worker dedicato non trovato. Interrompo.")
+          sub=api(prefix+"/workers/subdomain")["subdomain"]
+          if sub!="vocidicassino": raise SystemExit("Sottodominio differente da quello previsto.")
+          endpoint="https://"+name+"."+sub+".workers.dev"
+          import http.client
+          def check(path, key=None, method="GET"):
+              conn=http.client.HTTPSConnection(name+"."+sub+".workers.dev",timeout=25)
+              try:
+                  headers={"Authorization":"Bearer "+key} if key else {}
+                  conn.request(method,path,headers=headers)
+                  response=conn.getresponse()
+                  raw=response.read(65536)
+                  try: data=json.loads(raw)
+                  except (ValueError,UnicodeError): data={}
+                  return response.status,data
+              except (OSError,http.client.HTTPException):
+                  return 0,{}
+              finally: conn.close()
+          status,health=check("/health")
+          if status!=200 or health.get("service")!=name or health.get("version") not in (2,3): raise SystemExit("Identità Worker non verificata.")
+          if check("/api/recipes")[0]!=401 or check("/api/check",admin)!=(200,{"database":True,"photos":True}): raise SystemExit("Controlli preliminari falliti. Nessuna modifica.")
+          state=api(prefix+"/workers/scripts/"+name+"/subdomain")
+          if state.get("enabled") is not True: raise SystemExit("Worker non raggiungibile.")
+          query=api(prefix+"/d1/database/"+db+"/query","POST",{"sql":"CREATE TABLE IF NOT EXISTS recipe_sessions (token_hash TEXT PRIMARY KEY NOT NULL, expires_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS recipe_sessions_expiry ON recipe_sessions(expires_at); CREATE TABLE IF NOT EXISTS recipe_vision_usage(day TEXT PRIMARY KEY NOT NULL, used INTEGER NOT NULL CHECK(used>=0));"})
+          if not isinstance(query,list) or not all(q.get("success") for q in query): raise SystemExit("Schema sessioni non verificato.")
+          metadata={"main_module":"worker.mjs","compatibility_date":"2026-11-25","bindings":[{"type":"d1","name":"DB","database_id":db},{"type":"r2_bucket","name":"PHOTOS","bucket_name":bucket,"jurisdiction":"eu"},{"type":"secret_text","name":"RECIPES_ADMIN_TOKEN","text":admin},{"type":"ai","name":"AI"}],"observability":{"enabled":False}}
+          boundary="cf"+secrets.token_hex(16)
+          parts=[]
+          def part(field,content,mime,filename=None):
+              disposition='Content-Disposition: form-data; name="'+field+'"'
+              if filename: disposition+='; filename="'+filename+'"'
+              parts.append(("--"+boundary+"\r\n"+disposition+"\r\nContent-Type: "+mime+"\r\n\r\n").encode()+content+b"\r\n")
+          part("metadata",json.dumps(metadata).encode(),"application/json")
+          part("worker.mjs",pathlib.Path("cloudflare/v124-worker.mjs").read_bytes(),"application/javascript+module","worker.mjs")
+          payload=b"".join(parts)+("--"+boundary+"--\r\n").encode()
+          api(prefix+"/workers/scripts/"+name,"PUT",multipart=(boundary,payload))
+          for _ in range(6):
+              status,health=check("/health")
+              if status==200 and health.get("version")==3 and health.get("sessions") is True and health.get("vision") is True: break
+              time.sleep(5)
+          else: raise SystemExit("Nuova versione non ancora verificata.")
+          if check("/api/recipes")[0]!=401 or check("/api/check",admin)!=(200,{"database":True,"photos":True}) or check("/api/vision",None,"POST")[0]!=401 or check("/api/vision",admin,"POST")[0]!=400: raise SystemExit("Verifiche di accesso fallite.")
+          status,session=check("/api/session",admin,"POST")
+          if status!=201 or not isinstance(session.get("token"),str): raise SystemExit("Creazione sessione fallita.")
+          temporary=session["token"]
+          try:
+              if check("/api/check",temporary)!=(200,{"database":True,"photos":True}): raise SystemExit("Sessione non funzionante.")
+          finally:
+              ended=check("/api/session/end",temporary,"POST")
+          if ended!=(200,{"ended":True}) or check("/api/check",temporary)[0]!=401: raise SystemExit("Revoca sessione non verificata.")
+          print("Sessioni, revoca, binding IA e consenso verificati. Nessuna ricetta modificata.")
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("## V12.4 Worker attivo\n\nSessioni, binding IA e protezione accessi verificati. Nessuna foto inviata al modello; nessuna ricetta modificata. Inferenza da collaudare con documento autorizzato.\n")
