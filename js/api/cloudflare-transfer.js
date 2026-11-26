@@ -46,7 +46,7 @@ function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
  $("editor-cancel").disabled=busy;
- $("ocr-region-load").disabled=busy;$("ocr-region-reset").disabled=busy;$("ocr-mode").disabled=busy;
+ $("ocr-region-load").disabled=busy;$("ocr-region-reset").disabled=busy;$("ocr-mode").disabled=busy;$("ocr-region-target").disabled=busy;
  $("restore-file").disabled=busy||!connected;$("restore-preview").disabled=busy||!connected||!$("restore-file").files.length;$("restore-run").disabled=busy||!connected||!restorePlan?.length;$("restore-clear").disabled=busy;
  $("skf-apply").disabled=busy||!skfProposal||!draft;
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
@@ -495,11 +495,30 @@ function parseDrawingText(raw){
  }
  return {items:results,conflicts};
 }
-function renderOCR(){
+function parseTargetOCR(raw,key){
+ const prefixes={irTipo:"IR",orTipo:"OR",gabbiaTipo:"AT|CA|CG|C",schermoTipo:"SR|SH|Z",diametroSfera:"RB"};
+ if(!prefixes[key])return parseDrawingText(raw);
+ const candidates=[];
+ const re=new RegExp("(?:^|[^A-Z0-9])((?:"+prefixes[key]+")[ \\t]*[-‐‑–—][ \\t]*[A-Z0-9]+(?:[-. ,][A-Z0-9]+){0,6})","gim");
+ for(const m of String(raw||"").slice(0,60000).matchAll(re)){
+  let code=m[1].trim().toUpperCase().replace(/[‐‑–—]/g,"-").replace(/[ \t]*-[ \t]*/g,"-");
+  code=code.split(/\b(?:STANDARD|MATERIAL|PART MASS)\b/i)[0].trim();
+  let value=code;
+  if(key==="diametroSfera"){
+   const match=code.match(/^RB-(\d+[.,]\d+)$/);value=match?numberValue(match[1]):null;
+   if(value===null||value<=0)continue;
+  }else if(!new RegExp("^(?:"+prefixes[key]+")-[A-Z0-9]+(?:-[A-Z0-9]+)*(?: [A-Z0-9]+(?:-[A-Z0-9]+)*){0,3}$").test(code)||code.length>80)continue;
+  candidates.push({key,value,evidence:m[1],review:true});
+ }
+ const unique=new Set(candidates.map(x=>String(x.value)));
+ return {items:unique.size===1?[candidates[0]]:[],conflicts:unique.size>1?[key]:[]};
+}
+
+function renderOCR(parsed=null){
  const result=$("ocr-result");result.replaceChildren();
- const {items,conflicts}=parseDrawingText($("ocr-text").value);
+ const {items,conflicts}=parsed||parseDrawingText($("ocr-text").value);
  if(conflicts.length)result.append(element("p","Letture discordanti, escluse: "+conflicts.map(k=>fieldLabels[k]||k).join(", "),"ocr-review"));
- if(!items.length){result.append(element("p","Nessun dato univoco riconosciuto. Prova la modalità distinta o quote, oppure completa manualmente."));return;}
+ if(!items.length){$("ocr-raw").open=true;result.append(element("p","Nessun dato univoco riconosciuto. Il testo effettivamente letto è visibile qui sotto. Prova a selezionare una sola cella e il componente corrispondente."));return;}
  const isSame=item=>{const v=$("ed-"+item.key)?.value??"";return numericFields.has(item.key)?v.trim()!==""&&numberValue(v)===item.value:String(v).trim().toUpperCase()===String(item.value).toUpperCase();};
  items.sort((a,b)=>Number(isSame(a))-Number(isSame(b)));
  result.append(element("strong","Proposte da verificare: "+items.length),element("p",items.filter(x=>!isSame(x)).length+" nuove o diverse · "+items.filter(isSame).length+" già presenti","ocr-note"));
@@ -513,7 +532,7 @@ function renderOCR(){
   for(const [,item] of chosen){if(item.key==="classeGioco")setEditorClass(item.value);else $("ed-"+item.key).value=item.value;}previewSKF();result.replaceChildren(element("p","Valori inseriti nella scheda, non ancora salvati."));
  };result.append(apply);
 }
-$("ocr-suggest").onclick=()=>{if(draft&&!busy)renderOCR();};
+$("ocr-suggest").onclick=()=>{if(draft&&!busy){const target=$("ocr-mode").value==="region"?$("ocr-region-target").value:"";renderOCR(target?parseTargetOCR($("ocr-text").value,target):null);}};
 let ocrLibraryPromise=null;
 function loadOcrLibrary(){
  if(globalThis.Tesseract?.createWorker)return Promise.resolve(globalThis.Tesseract);
@@ -530,7 +549,7 @@ function loadOcrLibrary(){
 let regionBitmap=null,regionBox=null,regionStart=null,regionEpoch=0;
 function clearOCRRegion(){
  regionEpoch++;if(regionBitmap){regionBitmap.close();regionBitmap=null;}regionBox=null;regionStart=null;
- const canvas=$("ocr-region-canvas");canvas.hidden=true;canvas.width=1;canvas.height=1;$("ocr-region-reset").hidden=true;$("ocr-region-info").textContent="";$("ocr-region-panel").hidden=true;
+ const canvas=$("ocr-region-canvas");canvas.hidden=true;canvas.width=1;canvas.height=1;$("ocr-region-reset").hidden=true;$("ocr-region-info").textContent="";$("ocr-region-panel").hidden=true;$("ocr-region-target").value="";
 }
 function regionPoint(event){
  const b=$("ocr-region-canvas").getBoundingClientRect();
@@ -592,7 +611,7 @@ async function prepareOCRImage(file,mode){
   return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error("Immagine non disponibile.")),"image/png"));
  }finally{bitmap.close();}
 }
-async function readLocalOCR(file,mode){
+async function readLocalOCR(file,mode,target=""){
  const T=await loadOcrLibrary(),root=new URL("./vendor/ocr/",document.baseURI);
  const bar=$("ocr-progress"),message=$("ocr-progress-text");
  bar.hidden=false;bar.value=0;message.textContent="Preparazione del motore OCR…";
@@ -602,10 +621,17 @@ async function readLocalOCR(file,mode){
    const w=await T.createWorker("eng",1,{workerPath:new URL("worker.min.js",root).href,corePath:new URL("core/",root).href,langPath:new URL("lang/",root).href,workerBlobURL:false,cacheMethod:"none",gzip:true,
     logger:m=>{if(finished)return;const p=Number(m.progress);bar.value=Number.isFinite(p)?Math.round(Math.max(0,Math.min(1,p))*100):0;message.textContent=m.status==="recognizing text"?"Riconoscimento testo: "+bar.value+"%":"Preparazione OCR: "+bar.value+"%";}});
    if(finished){await w.terminate();throw Error("OCR interrotto.");}worker=w;
-   await worker.setParameters({tessedit_pageseg_mode:mode==="table"||mode==="region"?"6":"11",preserve_interword_spaces:"1"});
    const prepared=await prepareOCRImage(file,mode);
-   const ret=await worker.recognize(prepared);
-   return String(ret?.data?.text||"").trim();
+   const modes=mode==="region"?(target?["7","13"]:["6","11"]):[mode==="table"?"6":"11"];
+   const readings=[];
+   for(let i=0;i<modes.length;i++){
+    if(finished)throw Error("OCR interrotto.");
+    message.textContent="Lettura "+(i+1)+" di "+modes.length+"…";
+    await worker.setParameters({tessedit_pageseg_mode:modes[i],preserve_interword_spaces:"1"});
+    const ret=await worker.recognize(prepared);
+    const raw=String(ret?.data?.text||"").trim();if(raw&&!readings.includes(raw))readings.push(raw);
+   }
+   return readings.join("\n\n");
   })();
   return await Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Riconoscimento troppo lungo. Riprova con una fotografia più nitida o ritagliata.")),180000);})]);
  }finally{finished=true;clearTimeout(timer);if(worker)try{await worker.terminate();}catch{}bar.hidden=true;message.textContent="";}
@@ -616,11 +642,12 @@ $("ocr-read").onclick=()=>action(async()=>{
  try{
   const mode=$("ocr-mode").value;
   const file=mode==="region"?await cropOCRRegion():await getOCRFile();
-  const text=await readLocalOCR(file,mode);
+  const target=mode==="region"?$("ocr-region-target").value:"";
+  const text=await readLocalOCR(file,mode,target);
   if(!text)throw Error("Nessun testo riconosciuto. Prova con una foto più nitida.");
   if(!draft||!connected)return;
   const previous=$("ocr-text").value.trim();
-  $("ocr-text").value=mode==="full"?text:[previous,text].filter(Boolean).join("\n\n").slice(0,60000);renderOCR();
+  $("ocr-text").value=(mode==="full"||mode==="region"?text:[previous,text].filter(Boolean).join("\n\n")).slice(0,60000);renderOCR(target?parseTargetOCR($("ocr-text").value,target):null);
  }catch(e){output.textContent=e.message;throw e;}
  finally{$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
 });
