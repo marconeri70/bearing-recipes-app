@@ -46,7 +46,7 @@ function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
  $("editor-cancel").disabled=busy;
- $("vision-consent").disabled=busy;$("vision-read").disabled=busy||!connected||!draft||!$("vision-consent").checked;
+ $("vision-consent").disabled=busy;$("vision-scope").disabled=busy;updateVisionTargets();
  $("ocr-region-load").disabled=busy;$("ocr-region-reset").disabled=busy;$("ocr-mode").disabled=busy;$("ocr-region-target").disabled=busy;
  $("restore-file").disabled=busy||!connected;$("restore-preview").disabled=busy||!connected||!$("restore-file").files.length;$("restore-run").disabled=busy||!connected||!restorePlan?.length;$("restore-clear").disabled=busy;
  $("skf-apply").disabled=busy||!skfProposal||!draft;
@@ -345,7 +345,7 @@ $("cloud-backup").onclick=()=>action(async()=>{
 });
 
 const numericFields=new Set(["irDiametro","orDiametro","diametroSfera","numeroSfere","pesoMin","pesoMax","giocoMin","giocoMax"]);
-const fieldLabels={codice:"Codice lavorazione",irTipo:"Tipo IR",irDiametro:"Foro IR (mm)",orTipo:"Tipo OR",orDiametro:"Esterno OR (mm)",diametroSfera:"Diametro sfera (mm)",numeroSfere:"Numero sfere",gabbiaTipo:"Gabbia",grassoTipo:"Grasso",schermoTipo:"Schermo",pesoMin:"Peso minimo (g)",pesoMax:"Peso massimo (g)",classeGioco:"Classe gioco",serieGioco:"Riferimento SKF (serie)",giocoMin:"Gioco minimo (µm)",giocoMax:"Gioco massimo (µm)"};
+const fieldLabels={codice:"Codice lavorazione",irTipo:"Tipo IR",irDiametro:"Foro IR (mm)",orTipo:"Tipo OR",orDiametro:"Esterno OR (mm)",diametroSfera:"Diametro sfera (mm)",numeroSfere:"Numero sfere",gabbiaTipo:"Gabbia",grassoTipo:"Grasso",schermoTipo:"Tenute / schermi",pesoMin:"Peso minimo (g)",pesoMax:"Peso massimo (g)",classeGioco:"Classe gioco",serieGioco:"Riferimento SKF (serie)",giocoMin:"Gioco minimo (µm)",giocoMax:"Gioco massimo (µm)"};
 let draft=null,editorFile=null;
 function numberValue(x){
  const v=String(x??"").trim();
@@ -437,7 +437,8 @@ async function showHistory(row){
 }
 
 
-function clearOCR(){$("vision-consent").checked=false;$("vision-status").textContent="";clearOCRRegion();$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
+let lastLocalOCR=null;
+function clearOCR(){lastLocalOCR=null;$("vision-scope").value="missing";$("vision-targets").replaceChildren();$("vision-consent").checked=false;$("vision-status").textContent="";clearOCRRegion();$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
 function parseDrawingText(raw){
  const text=String(raw||"").slice(0,60000).replace(/\r/g,"").replace(/[‐‑‒–—]/g,"-");
  const candidates=new Map();
@@ -515,9 +516,11 @@ function parseTargetOCR(raw,key){
  return {items:unique.size===1?[candidates[0]]:[],conflicts:unique.size>1?[key]:[]};
 }
 
-function renderOCR(parsed=null){
+function renderOCR(parsed=null,options={}){
  const result=$("ocr-result");result.replaceChildren();
  const {items,conflicts}=parsed||parseDrawingText($("ocr-text").value);
+ const originalDraft=draft;
+ if(options.missing?.length){const note=element("div",null,"ocr-missing-list");note.append(element("strong","Campi non completati"));const list=element("ul");for(const x of options.missing)list.append(element("li",(fieldLabels[x.key]||x.key)+": "+({not_returned:"non restituito dal modello",invalid:"risposta non valida",conflict:"letture discordanti"}[x.reason]||"da verificare")));note.append(list);result.append(note);}
  if(conflicts.length)result.append(element("p","Letture discordanti, escluse: "+conflicts.map(k=>fieldLabels[k]||k).join(", "),"ocr-review"));
  if(!items.length){$("ocr-raw").open=true;result.append(element("p","Nessun dato univoco riconosciuto. Il testo effettivamente letto è visibile qui sotto. Prova a selezionare una sola cella e il componente corrispondente."));return;}
  const isSame=item=>{const v=$("ed-"+item.key)?.value??"";return numericFields.has(item.key)?v.trim()!==""&&numberValue(v)===item.value:String(v).trim().toUpperCase()===String(item.value).toUpperCase();};
@@ -526,11 +529,12 @@ function renderOCR(parsed=null){
  const checks=[];
  for(const item of items){
   const l=element("label"),cb=element("input");cb.type="checkbox";const current=$("ed-"+item.key)?.value;
-  const content=element("span",fieldLabels[item.key]+": "+item.value+(isSame(item)?" · già presente":current?" (attuale: "+current+")":" · da compilare"));content.append(element("small",item.evidence,"ocr-evidence"));if(item.review)content.append(element("small","Lettura incerta o da distinta: controlla sul disegno originale.","ocr-review"));l.append(cb,content);result.append(l);checks.push([cb,item]);
+  if(options.onlyEmpty&&String(current??"").trim())cb.disabled=true;
+  const content=element("span",fieldLabels[item.key]+": "+item.value+(isSame(item)?" · già presente":current?" (attuale: "+current+")":" · da compilare"));content.append(element("small",item.evidence,"ocr-evidence"));if(options.compare){const local=options.compare.items.find(x=>x.key===item.key);if(local){const same=numericFields.has(item.key)?Number(local.value)===Number(item.value):String(local.value).trim().toUpperCase()===String(item.value).trim().toUpperCase();content.append(element("small",same?"OCR locale concordante":"OCR locale diverso: "+local.value,same?"ocr-compare":"ocr-compare diff"));}else if(options.compare.conflicts.includes(item.key))content.append(element("small","OCR locale: letture discordanti","ocr-compare diff"));}if(item.review)content.append(element("small","Lettura incerta o da distinta: controlla sul disegno originale.","ocr-review"));l.append(cb,content);result.append(l);checks.push([cb,item]);
  }
  const apply=element("button","Applica solo i campi selezionati");apply.type="button";apply.className="secondary";apply.onclick=()=>{
-  if(!draft||busy)return;const chosen=checks.filter(([cb])=>cb.checked);if(!chosen.length||!confirm("Applicare "+chosen.length+" valori verificati? Nessun dato sarà salvato prima della conferma della ricetta."))return;
-  for(const [,item] of chosen){if(item.key==="classeGioco")setEditorClass(item.value);else $("ed-"+item.key).value=item.value;}previewSKF();result.replaceChildren(element("p","Valori inseriti nella scheda, non ancora salvati."));
+  if(!draft||draft!==originalDraft||busy)return;const chosen=checks.filter(([cb,item])=>cb.checked&&!cb.disabled&&(!options.onlyEmpty||!String($("ed-"+item.key)?.value??"").trim()));if(!chosen.length||!confirm("Applicare "+chosen.length+" valori verificati? Nessun dato sarà salvato prima della conferma della ricetta."))return;
+  for(const [,item] of chosen){if(item.key==="classeGioco")setEditorClass(item.value);else $("ed-"+item.key).value=item.value;}previewSKF();updateVisionTargets();result.replaceChildren(element("p","Valori inseriti nella scheda, non ancora salvati."));
  };result.append(apply);
 }
 $("ocr-suggest").onclick=()=>{if(draft&&!busy){const target=$("ocr-mode").value==="region"?$("ocr-region-target").value:"";renderOCR(target?parseTargetOCR($("ocr-text").value,target):null);}};
@@ -582,12 +586,12 @@ regionCanvas.addEventListener("pointerdown",e=>{if(busy||!regionBitmap||!e.isPri
 regionCanvas.addEventListener("pointermove",e=>{if(!regionStart||!e.isPrimary)return;const p=regionPoint(e);regionBox={x:Math.min(p.x,regionStart.x),y:Math.min(p.y,regionStart.y),w:Math.abs(p.x-regionStart.x),h:Math.abs(p.y-regionStart.y)};drawRegion();});
 regionCanvas.addEventListener("pointerup",e=>{if(!regionStart||!e.isPrimary)return;const p=regionPoint(e);regionBox={x:Math.min(p.x,regionStart.x),y:Math.min(p.y,regionStart.y),w:Math.abs(p.x-regionStart.x),h:Math.abs(p.y-regionStart.y)};regionStart=null;if(regionBox.w*regionBitmap.width<20||regionBox.h*regionBitmap.height<20)regionBox=null;drawRegion();$("ocr-region-info").textContent=regionBox?"Area selezionata. Premi Leggi disegno.":"Area troppo piccola. Riprova.";});
 regionCanvas.addEventListener("pointercancel",()=>{regionStart=null;regionBox=null;drawRegion();});
-async function cropOCRRegion(){
+async function cropOCRRegion(contrast=$("ocr-region-contrast").checked){
  if(!regionBitmap||!regionBox)throw Error("Apri il disegno e seleziona prima un rettangolo.");
  const b=regionBox,im=regionBitmap,sw=Math.max(1,Math.round(b.w*im.width)),sh=Math.max(1,Math.round(b.h*im.height)),ratio=Math.min(3,2400/Math.max(sw,sh)),c=document.createElement("canvas");
  c.width=Math.max(1,Math.round(sw*ratio));c.height=Math.max(1,Math.round(sh*ratio));
  const ctx=c.getContext("2d",{willReadFrequently:true});ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";ctx.drawImage(im,Math.floor(b.x*im.width),Math.floor(b.y*im.height),sw,sh,0,0,c.width,c.height);
- if($("ocr-region-contrast").checked){
+ if(contrast){
   const data=ctx.getImageData(0,0,c.width,c.height),p=data.data,hist=new Uint32Array(256);for(let i=0;i<p.length;i+=4)hist[Math.round(.299*p[i]+.587*p[i+1]+.114*p[i+2])]++;
   const total=p.length/4;let low=0,high=255,n=0;for(;low<255;low++){n+=hist[low];if(n>=total*.015)break;}n=0;for(;high>0;high--){n+=hist[high];if(n>=total*.015)break;}
   if(high-low>12){for(let i=0;i<p.length;i+=4){const g=.299*p[i]+.587*p[i+1]+.114*p[i+2],v=Math.max(0,Math.min(255,(g-low)*255/(high-low)));p[i]=p[i+1]=p[i+2]=v;}ctx.putImageData(data,0,0);}
@@ -648,27 +652,47 @@ $("ocr-read").onclick=()=>action(async()=>{
   if(!text)throw Error("Nessun testo riconosciuto. Prova con una foto più nitida.");
   if(!draft||!connected)return;
   const previous=$("ocr-text").value.trim();
-  $("ocr-text").value=(mode==="full"||mode==="region"?text:[previous,text].filter(Boolean).join("\n\n")).slice(0,60000);renderOCR(target?parseTargetOCR($("ocr-text").value,target):null);
+  $("ocr-text").value=(mode==="full"||mode==="region"?text:[previous,text].filter(Boolean).join("\n\n")).slice(0,60000);lastLocalOCR=target?parseTargetOCR($("ocr-text").value,target):parseDrawingText($("ocr-text").value);renderOCR(lastLocalOCR);
  }catch(e){output.textContent=e.message;throw e;}
  finally{$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
 });
 
+const VISION_KEYS=["irTipo","irDiametro","orTipo","orDiametro","diametroSfera","numeroSfere","gabbiaTipo","grassoTipo","schermoTipo","pesoMin","pesoMax","classeGioco"];
+const BOM_KEYS=new Set(["irTipo","orTipo","diametroSfera","numeroSfere","gabbiaTipo","schermoTipo"]);
+function selectVisionKeys(values,scope,target=""){return VISION_KEYS.filter(k=>(!target||k===target)&&(scope==="all"||!String(values[k]??"").trim()));}
+function visionKeysNow(){
+ const values=Object.fromEntries(VISION_KEYS.map(k=>[k,$("ed-"+k)?.value??""]));
+ return selectVisionKeys(values,$("vision-scope").value,$("ocr-mode").value==="region"?$("ocr-region-target").value:"");
+}
+function updateVisionTargets(){
+ const scope=$("vision-scope").value,keys=draft?visionKeysNow():[],out=$("vision-targets");out.replaceChildren();
+ for(const k of keys)out.append(element("span",fieldLabels[k]||k));
+ if(draft&&!keys.length)out.append(element("small","Nessun campo da completare nella selezione. Scegli Controlla tutti i campi per riesaminarli."));
+ $("vision-read").textContent=scope==="missing"?"Analizza solo i campi mancanti":"Controlla tutti con IA";
+ $("vision-read").disabled=busy||!connected||!draft||!$("vision-consent").checked||!keys.length;
+}
 $("vision-consent").onchange=syncControls;
+$("vision-scope").onchange=()=>{$("vision-consent").checked=false;updateVisionTargets();};
+$("ocr-mode").addEventListener("change",()=>{$("vision-consent").checked=false;updateVisionTargets();});
+$("ocr-region-target").addEventListener("change",()=>{$("vision-consent").checked=false;updateVisionTargets();});
+$("editor-fields").addEventListener("input",updateVisionTargets);
+$("editor-fields").addEventListener("change",updateVisionTargets);
 async function visionJpeg(file,mode){
- const prepared=mode==="region"?file:await prepareOCRImage(file,mode);
+ const prepared=mode==="region"||mode==="table"||mode==="full"?file:await prepareOCRImage(file,mode);
  const bitmap=await createImageBitmap(prepared);
  try{
-  const c=document.createElement("canvas"),ratio=Math.min(1,2200/Math.max(bitmap.width,bitmap.height));c.width=Math.max(1,Math.round(bitmap.width*ratio));c.height=Math.max(1,Math.round(bitmap.height*ratio));
-  const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(bitmap,0,0,c.width,c.height);
-  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error("Preparazione immagine fallita.")),"image/jpeg",.88));
+  const c=document.createElement("canvas"),top=mode==="table"?Math.floor(bitmap.height*.43):0,height=bitmap.height-top,ratio=Math.min(mode==="table"?1.5:1,3000/Math.max(bitmap.width,height));c.width=Math.max(1,Math.round(bitmap.width*ratio));c.height=Math.max(1,Math.round(height*ratio));
+  const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.imageSmoothingQuality="high";ctx.drawImage(bitmap,0,top,bitmap.width,height,0,0,c.width,c.height);
+  const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error("Preparazione immagine fallita.")),"image/jpeg",.94));
   if(blob.size>3*1024*1024)throw Error("Immagine IA troppo grande: seleziona una zona più piccola.");
   return blob;
  }finally{bitmap.close();}
 }
 $("vision-read").onclick=()=>{
  if(!draft||busy||!connected||!$("vision-consent").checked)return;
- const mode=$("ocr-mode").value,target=mode==="region"?$("ocr-region-target").value:"";
- if(!confirm("Inviare "+(mode==="region"?"solo il ritaglio selezionato":mode==="full"?"il disegno completo":"la zona di lettura scelta")+" a Cloudflare Workers AI? Conferma soltanto se autorizzato dall’azienda."))return;
+ const scope=$("vision-scope").value,keys=visionKeysNow();if(!keys.length)return;
+ const selected=$("ocr-mode").value,mode=selected==="full"&&scope==="missing"&&keys.every(k=>BOM_KEYS.has(k))?"table":selected;
+ if(!confirm("Inviare "+(mode==="region"?"solo il ritaglio selezionato":mode==="full"?"il disegno completo":mode==="table"?"la fascia inferiore della distinta":"la zona di lettura scelta")+" a Cloudflare Workers AI per "+keys.length+" campi? Conferma soltanto se autorizzato dall’azienda."))return;
  $("vision-consent").checked=false;
  const current=draft;
  action(async()=>{
@@ -677,20 +701,21 @@ $("vision-read").onclick=()=>{
   const controller=new AbortController();let timer;
   try{
    const health=await fetch(API+"/health",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal}).then(r=>r.json());
-   if(health.vision!==true||health.visionFormat!==2)throw Error("Aggiorna il Worker con il workflow V12.5 prima di riprovare: nessuna analisi consumata.");
-   const file=mode==="region"?await cropOCRRegion():await getOCRFile();
+   if(health.vision!==true||health.visionFormat!==3)throw Error("Aggiorna il Worker con il workflow V12.6 prima di riprovare: nessuna analisi consumata.");
+   const file=mode==="region"?await cropOCRRegion(false):await getOCRFile();
    const body=await visionJpeg(file,mode);
    if(draft!==current||!connected)return;
    out.textContent="Analisi visiva in corso…";
    timer=setTimeout(()=>controller.abort(),110000);
-   const data=await json("/api/vision?consent=1&target="+encodeURIComponent(target||"all"),{method:"POST",headers:{"Content-Type":"image/jpeg"},body,signal:controller.signal});
+   const data=await json("/api/vision?consent=1&targets="+encodeURIComponent(keys.join(",")),{method:"POST",headers:{"Content-Type":"image/jpeg"},body,signal:controller.signal});
    if(draft!==current||!connected)return;
    if(!Array.isArray(data.items)||!Array.isArray(data.conflicts))throw Error("Risposta IA non valida.");
-   const items=data.items.filter(x=>fields.includes(x.key)&&x.key!=="codice"&&x.key!=="serieGioco"&&x.key!=="giocoMin"&&x.key!=="giocoMax"&&$("ed-"+x.key)).map(x=>({...x,review:true}));
-   out.textContent="Risultato IA: "+items.length+" proposte da controllare. Tentativi residui oggi: "+data.remaining+".";
-   if(!items.length){$("ocr-result").textContent="Nessun campo sufficientemente leggibile. Seleziona un ritaglio più preciso oppure usa OCR locale.";return;}
+   const items=data.items.filter(x=>keys.includes(x.key)&&$("ed-"+x.key)&&(scope!=="missing"||!String($("ed-"+x.key).value).trim())).map(x=>({...x,review:true}));
+   out.textContent="Risultato IA: "+items.length+" di "+keys.length+" campi richiesti. Tentativi residui oggi: "+data.remaining+".";
    $("ocr-text").value=items.map(x=>x.key+": "+x.value+" | "+x.evidence).join("\n");
-   renderOCR({items,conflicts:data.conflicts});
+   const missing=Array.isArray(data.missing)?data.missing.filter(x=>keys.includes(x.key)):keys.filter(k=>!items.some(x=>x.key===k)).map(key=>({key,reason:"not_returned"}));
+   renderOCR({items,conflicts:data.conflicts.filter(k=>keys.includes(k))},{onlyEmpty:scope==="missing",missing,compare:lastLocalOCR});
+
   }catch(e){if(draft===current)out.textContent=e.name==="AbortError"?"Tempo massimo superato; l’analisi può essere conteggiata.":e.message;}
   finally{clearTimeout(timer);$("ocr-read").disabled=false;$("ocr-suggest").disabled=false;}
  });
@@ -718,15 +743,16 @@ function openEditor(row=null,source=null){
   if(k==="codice"){input.required=true;input.readOnly=!!row;}
   if(numericFields.has(k))input.inputMode="decimal";
   if(k==="serieGioco")input.placeholder="storica / BCG02 / BCG04 / BCG06";
-  label.append(input);if(k==="classeGioco")label.append(element("small","Le classi speciali senza tabella richiedono limiti verificati sul disegno.","class-info"));$("editor-fields").append(label);
+  if(k==="schermoTipo")input.placeholder="Più codici separati da ;";
+  label.append(input);if(k==="schermoTipo")label.append(element("small","Inserisci tutti i codici distinti, separati da punto e virgola.","class-info"));if(k==="classeGioco")label.append(element("small","Le classi speciali senza tabella richiedono limiti verificati sul disegno.","class-info"));$("editor-fields").append(label);
  }
  $("editor-drawing").textContent=draft.base.disegnoR2Key?"Disegno privato R2 presente.":draft.base.disegnoUrl?"Vecchio link presente. Seleziona una foto per sostituirlo con il file R2.":"Nessun disegno associato.";
  $("cloud-editor").hidden=false;$("cloud-editor").scrollIntoView({block:"start"});syncControls();previewSKF();
 }
 function chooseEditorFile(f){
  if(!draft||busy||!f)return;
- if(!/^image\/(jpeg|png|webp)$/.test(f.type)||!f.size||f.size>8*1024*1024){$("editor-file").value="";$("editor-capture").value="";editorFile=null;$("editor-file-status").textContent="Formato non valido: JPG, PNG, WebP, fino a 8 MB.";return;}
- clearOCRRegion();$("ocr-mode").value="full";editorFile=f;$("editor-file-status").textContent="Foto selezionata: "+f.name+". Verrà caricata al salvataggio.";
+ if(!/^image\/(jpeg|png|webp)$/.test(f.type)||!f.size||f.size>8*1024*1024){$("editor-file").value="";$("editor-capture").value="";editorFile=null;clearOCR();updateVisionTargets();$("editor-file-status").textContent="Formato non valido: JPG, PNG, WebP, fino a 8 MB.";return;}
+ clearOCR();editorFile=f;updateVisionTargets();$("editor-file-status").textContent="Foto selezionata: "+f.name+". Verrà caricata al salvataggio.";
 }
 async function saveEditor(event){
  event.preventDefault();if(!draft||busy||!connected)return;
