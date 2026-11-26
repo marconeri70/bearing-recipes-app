@@ -677,7 +677,7 @@ $("vision-read").onclick=()=>{
   const controller=new AbortController();let timer;
   try{
    const health=await fetch(API+"/health",{cache:"no-store",credentials:"omit",redirect:"error",signal:controller.signal}).then(r=>r.json());
-   if(health.vision!==true)throw Error("Motore IA non ancora attivo: esegui il workflow V12.4.");
+   if(health.vision!==true||health.visionFormat!==2)throw Error("Aggiorna il Worker con il workflow V12.5 prima di riprovare: nessuna analisi consumata.");
    const file=mode==="region"?await cropOCRRegion():await getOCRFile();
    const body=await visionJpeg(file,mode);
    if(draft!==current||!connected)return;
