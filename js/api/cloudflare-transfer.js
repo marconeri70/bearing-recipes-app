@@ -49,7 +49,7 @@ function syncControls(){
  $("vision-consent").disabled=busy;$("vision-scope").disabled=busy;updateVisionTargets();
  $("ocr-region-load").disabled=busy;$("ocr-region-reset").disabled=busy;$("ocr-mode").disabled=busy;$("ocr-region-target").disabled=busy;
  $("restore-file").disabled=busy||!connected;$("restore-preview").disabled=busy||!connected||!$("restore-file").files.length;$("restore-run").disabled=busy||!connected||!restorePlan?.length;$("restore-clear").disabled=busy;
- $("skf-apply").disabled=busy||!skfProposal||!draft;
+ $("skf-apply").disabled=busy||!skfProposal||!draft||$("skf-result").dataset.state==="auto";
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
 }
 function button(text,fn,blocked=false){const b=element("button",text);b.type="button";b.dataset.action="1";b.dataset.blocked=String(blocked);b.onclick=fn;return b;}
@@ -389,6 +389,20 @@ function lookupSKF(rows,serie,classe,d){
  if(new Set(hits.map(x=>x.min+"|"+x.max)).size!==1)return {state:"ambiguous"};
  return {state:"ok",min:hits[0].min,max:hits[0].max,kind:hits[0].kind};
 }
+
+const SKF_SERIES=["BCG02","BCG04","BCG06"];
+const SKF_LOAD={BCG02:"±2",BCG04:"±5",BCG06:"±15"};
+function resolveSKF(rows,serie,classe,d){
+ if(!classe||d===null||d<=0)return {state:"incomplete"};
+ if(serie){const result=lookupSKF(rows,serie,classe,d);return {...result,serie,automatic:serie!=="storica"&&result.state==="ok"};}
+ const options=SKF_SERIES.map(serie=>({serie,...lookupSKF(rows,serie,classe,d)})).filter(x=>x.state==="ok"||x.state==="ambiguous");
+ if(options.some(x=>x.state==="ambiguous"))return {state:"ambiguous",options};
+ if(options.length===1)return {...options[0],automatic:true};
+ if(options.length>1)return {state:"choice",options};
+ return {state:"missing"};
+}
+function describeSKFOption(x){return x.serie+" ("+SKF_LOAD[x.serie]+" daN): "+(x.state==="ambiguous"?"valori discordanti":x.min+"–"+x.max+" µm");}
+
 async function loadSKF(){
  try{
   const inputs=[["tabella_gioco.csv","storica"],["tabella_gioco_normale_skf.csv","normale"],["tabella_gioco_diviso_skf.csv","diviso"]];
@@ -400,22 +414,48 @@ async function loadSKF(){
 }
 function previewSKF(){
  const output=$("skf-result"),apply=$("skf-apply");skfProposal=null;apply.disabled=true;
+ output.dataset.state="";
  if(!draft)return;
- if(!skfReady){output.textContent="Tabelle SKF non disponibili. Usa esclusivamente limiti verificati sul disegno.";return;}
- const serie=$("ed-serieGioco").value,classe=$("ed-classeGioco").value,d=numberValue($("ed-irDiametro").value);
- const result=lookupSKF(skfRows,serie,classe,d);
- if(result.state==="incomplete"){output.textContent="Seleziona riferimento, classe e foro IR.";return;}
- if(result.state==="missing"){output.textContent="Nessun intervallo disponibile per questa combinazione. Mantieni o inserisci i limiti controllati sul disegno.";return;}
- if(result.state==="ambiguous"){output.textContent="Valori discordanti nella tabella: nessuna proposta automatica. Verifica il documento.";return;}
+ const ref=$("ed-serieGioco"),cl=$("ed-classeGioco"),bore=$("ed-irDiametro"),lo=$("ed-giocoMin"),hi=$("ed-giocoMax");
+ if(!ref||!cl||!bore||!lo||!hi)return;
+ const classe=cl.value,d=numberValue(bore.value);
+ // Track only unsaved, automatically generated limits. Never delete saved/manual values.
+ const old=draft.skfAuto;
+ const autoUnedited=old&&numberValue(lo.value)===old.min&&numberValue(hi.value)===old.max;
+ if(old&&!autoUnedited)draft.skfAuto=null;
+ const selected=draft.skfAutoSerie&&ref.value===draft.skfAutoSerie?"":ref.value;
+ const result=skfReady?resolveSKF(skfRows,selected,classe,d):{state:"unavailable"};
+ if(draft.skfAutoSerie&&ref.value!==draft.skfAutoSerie)draft.skfAutoSerie=null;
+ if(autoUnedited&&(result.state!=="ok"||!result.automatic||result.min!==old.min||result.max!==old.max||result.serie!==old.serie)){
+  lo.value="";hi.value="";draft.skfAuto=null;
+ }
+ if(draft.skfAutoSerie&&result.state!=="ok"){ref.value="";draft.skfAutoSerie=null;}
+ if(result.state==="unavailable"){output.textContent="Tabelle SKF non disponibili. Usa esclusivamente limiti verificati sul disegno.";return;}
+ if(result.state==="incomplete"){output.textContent="Inserisci il foro IR e scegli la classe di gioco.";return;}
+ if(result.state==="choice"){
+  output.dataset.state="choice";output.textContent="Più carichi di misura possibili. Seleziona il riferimento previsto dalla produzione:\n"+result.options.map(describeSKFOption).join("\n");return;
+ }
+ if(result.state==="ambiguous"){output.dataset.state="warning";output.textContent="Valori discordanti nella tabella: nessuna proposta automatica. Verifica il documento.";return;}
+ if(result.state==="missing"){output.dataset.state="warning";output.textContent="Nessun intervallo documentato per questa combinazione. Verifica il riferimento o inserisci limiti approvati manualmente; nessun valore presunto.";return;}
  const source=result.kind==="storica"?"Tabella storica non verificata":result.kind==="diviso"?"SKF classi divise, stampa 04/01/2021":"SKF normale, stampa 20/07/2020";
- const load=({BCG02:"±2",BCG04:"±5",BCG06:"±15"})[serie];
- output.textContent="Proposta: "+result.min+" – "+result.max+" µm. "+source+(load?" · carico indicato "+load+" daN":"")+". Controlla il riferimento di produzione.";
+ const detail=result.min+" – "+result.max+" µm · "+result.serie+(SKF_LOAD[result.serie]?" · "+SKF_LOAD[result.serie]+" daN":"")+" · "+source+".";
  skfProposal=result;apply.disabled=busy;
+ const empty=!lo.value.trim()&&!hi.value.trim();
+ if(result.automatic&&(empty||autoUnedited)){
+  ref.value=result.serie;if(!selected)draft.skfAutoSerie=result.serie;
+  lo.value=result.min;hi.value=result.max;draft.skfAuto={min:result.min,max:result.max,serie:result.serie};
+  output.dataset.state="auto";output.textContent="Compilato automaticamente: "+detail+" Verifica prima di salvare.";apply.disabled=true;return;
+ }
+ const same=numberValue(lo.value)===result.min&&numberValue(hi.value)===result.max;
+ output.dataset.state=same?"":"warning";
+ output.textContent="Proposta: "+detail+(same?" I limiti presenti coincidono.":" I valori presenti non sono stati modificati; usa Applica limiti proposti dopo verifica.");
+ if(result.kind==="storica")output.textContent+=" La tabella storica non viene usata per la compilazione automatica.";
 }
 $("skf-apply").onclick=()=>{
  if(!draft||busy||!skfProposal)return;
  if(!confirm("Applicare i limiti proposti? Conferma dopo il confronto con la specifica approvata."))return;
- $("ed-giocoMin").value=skfProposal.min;$("ed-giocoMax").value=skfProposal.max;
+ $("ed-serieGioco").value=skfProposal.serie;$("ed-giocoMin").value=skfProposal.min;$("ed-giocoMax").value=skfProposal.max;
+ draft.skfAuto=null;draft.skfAutoSerie=null;previewSKF();
 };
 async function showHistory(row){
  await action(async()=>{
@@ -736,9 +776,9 @@ function openEditor(row=null,source=null){
   if(groupTitles[k])$("editor-fields").append(element("h3",groupTitles[k],"editor-group"));
   const label=element("label",fieldLabels[k]||k,k==="codice"?"wide":"");
   const input=element(k==="serieGioco"||k==="classeGioco"?"select":"input");input.id="ed-"+k;
-  if(k==="serieGioco"){const values=["","storica","BCG02","BCG04","BCG06"];const prior=draft.base[k]||"";if(prior&&!values.includes(prior))values.push(prior);for(const v of values){const opt=element("option",v||"Seleziona riferimento");opt.value=v;input.append(opt);}}
+  if(k==="serieGioco"){const values=["","storica","BCG02","BCG04","BCG06"];const prior=draft.base[k]||"";if(prior&&!values.includes(prior))values.push(prior);for(const v of values){const opt=element("option",v?(v==="storica"?"Storica (verifica manuale)":v+(SKF_LOAD[v]?" · "+SKF_LOAD[v]+" daN":"")):"Automatico (se univoco)");opt.value=v;input.append(opt);}}
   if(k==="classeGioco"){refreshEditorClasses(input,draft.base[k]??"");input.addEventListener("change",()=>onEditorClassChange(input));}
-  else {input.value=draft.base[k]??"";if(["serieGioco","irDiametro"].includes(k))input.addEventListener("input",previewSKF);}
+  else {input.value=draft.base[k]??"";if(k==="serieGioco")input.addEventListener("change",()=>{draft.skfAutoSerie=null;previewSKF();});if(k==="irDiametro")input.addEventListener("input",previewSKF);if(k==="giocoMin"||k==="giocoMax")input.addEventListener("input",()=>{if(draft)draft.skfAuto=null;});}
   input.maxLength=k==="codice"?200:4000;
   if(k==="codice"){input.required=true;input.readOnly=!!row;}
   if(numericFields.has(k))input.inputMode="decimal";
