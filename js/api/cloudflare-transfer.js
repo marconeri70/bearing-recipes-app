@@ -569,7 +569,7 @@ async function cropOCRRegion(){
  const ctx=c.getContext("2d",{willReadFrequently:true});ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";ctx.drawImage(im,Math.floor(b.x*im.width),Math.floor(b.y*im.height),sw,sh,0,0,c.width,c.height);
  if($("ocr-region-contrast").checked){
   const data=ctx.getImageData(0,0,c.width,c.height),p=data.data,hist=new Uint32Array(256);for(let i=0;i<p.length;i+=4)hist[Math.round(.299*p[i]+.587*p[i+1]+.114*p[i+2])]++;
-  const total=p.length/4;let low=0,high=255,n=0;for(;low<255;low++){n+=hist[low];if(n>=total*.015)break;}n=0;for(;high>0;high--){n+=hist[high];if(n>=total*.985)break;}
+  const total=p.length/4;let low=0,high=255,n=0;for(;low<255;low++){n+=hist[low];if(n>=total*.015)break;}n=0;for(;high>0;high--){n+=hist[high];if(n>=total*.015)break;}
   if(high-low>12){for(let i=0;i<p.length;i+=4){const g=.299*p[i]+.587*p[i+1]+.114*p[i+2],v=Math.max(0,Math.min(255,(g-low)*255/(high-low)));p[i]=p[i+1]=p[i+2]=v;}ctx.putImageData(data,0,0);}
  }
  return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error("Ritaglio non disponibile.")),"image/png"));
