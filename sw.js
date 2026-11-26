@@ -1,13 +1,13 @@
 // sw.js - PWA Ricette Lavorazione Cuscinetti
 // Cache network-first per evitare che il telefono resti bloccato su vecchie versioni.
 
-const CACHE_NAME = 'bearing-recipes-v32-industrial-ui';
+const CACHE_NAME = 'bearing-recipes-v33-ocr-region';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './archivio-locale.html',
   './cloudflare-ricette.html',
-  './js/api/cloudflare-transfer.js?v=13',
+  './js/api/cloudflare-transfer.js?v=14',
   './css/styles.css',
   './css/styles.css?v=v10.2-diametri',
   './js/main.js',

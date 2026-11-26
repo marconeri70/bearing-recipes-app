@@ -46,6 +46,7 @@ function syncControls(){
  $("login").disabled=busy||connected;$("key").disabled=busy||connected;
  $("logout").disabled=busy||!connected;$("refresh").disabled=busy||!connected;$("cloud-backup").disabled=busy||!connected;
  $("editor-cancel").disabled=busy;
+ $("ocr-region-load").disabled=busy;$("ocr-region-reset").disabled=busy;$("ocr-mode").disabled=busy;
  $("restore-file").disabled=busy||!connected;$("restore-preview").disabled=busy||!connected||!$("restore-file").files.length;$("restore-run").disabled=busy||!connected||!restorePlan?.length;$("restore-clear").disabled=busy;
  $("skf-apply").disabled=busy||!skfProposal||!draft;
  document.querySelectorAll("[data-action]").forEach(b=>{b.disabled=busy||!connected||b.dataset.blocked==="true";});
@@ -435,7 +436,7 @@ async function showHistory(row){
 }
 
 
-function clearOCR(){$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
+function clearOCR(){clearOCRRegion();$("ocr-text").value="";$("ocr-result").replaceChildren();$("ocr-progress").hidden=true;$("ocr-progress").value=0;$("ocr-progress-text").textContent="";$("ocr-mode").value="full";$("ocr-raw").open=false;}
 function parseDrawingText(raw){
  const text=String(raw||"").slice(0,60000).replace(/\r/g,"").replace(/[‐‑‒–—]/g,"-");
  const candidates=new Map();
@@ -451,10 +452,29 @@ function parseDrawingText(raw){
  const positive=x=>{const n=num(x);return n!==null&&n>0?n:null;};
  const integer=x=>{const n=positive(x);return Number.isInteger(n)?n:null;};
  const upper=x=>x.toUpperCase().replace(/\s*-\s*/g,"-");
- scan("irTipo",/\b(?:IR|INNER\s+RING)\s*[:=|]?\s*(IR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\b/gi,upper);
- scan("orTipo",/\b(?:OR|OUTER\s+RING)\s*[:=|]?\s*(OR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\b/gi,upper);
- scan("irTipo",/^\s*(IR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\s*$/gim,upper,true);
- scan("orTipo",/^\s*(OR\s*-\s*[A-Z0-9]+(?:-[A-Z0-9]+)*)\s*$/gim,upper,true);
+ // Read a designation cell, not only the first token. Stop at the next column.
+ function designation(raw,prefixes){
+  let cell=String(raw).trim().replace(/^[|:=]+[ \t]*/,"");
+  cell=cell.split(/[ \t]{2,}|\||\b(?:STANDARD|MATERIAL|PART[- ]?MASS)\b/i)[0].trim();
+  cell=cell.replace(/[ \t]*-[ \t]*/g,"-").replace(/[ \t]+/g," ").toUpperCase();
+  const pattern=new RegExp("^(?:"+prefixes+")-[A-Z0-9]+(?:-[A-Z0-9]+)*(?: [A-Z0-9]+(?:-[A-Z0-9]+)*){0,3}$");
+  return cell.length<=80&&pattern.test(cell)?cell:null;
+ }
+ function designationRows(key,label,prefixes){
+  const re=new RegExp("(?:^|\\n)[ \\t]*(?:\\d{1,3}[ \\t|]+)?(?:"+label+")[ \\t|:=]*(?:\\n[ \\t]*)?((?:"+prefixes+")[ \\t]*-[^\\n]+)","gi");
+  for(const m of text.matchAll(re))add(key,designation(m[1],prefixes),m[0],true);
+ }
+ designationRows("irTipo","INNER[ \\t]+RING|IR","IR");
+ designationRows("orTipo","OUTER[ \\t]+RING|OR","OR");
+ designationRows("gabbiaTipo","CAGE","AT|CA|CG|C");
+ designationRows("schermoTipo","SEAL|SHIELD","SR|SH|Z");
+ // Some OCR passes split the designation onto its own line. Do not use a short
+ // standalone code if a complete row was recognized in the same pass.
+ for(const [key,prefix] of [["irTipo","IR"],["orTipo","OR"]]){
+  if(candidates.has(key))continue;
+  const re=new RegExp("^\\s*("+prefix+"[ \\t]*-[^\\n]+)$","gim");
+  for(const m of text.matchAll(re))add(key,designation(m[1],prefix),m[0],true);
+ }
  scan("irDiametro",/\b(?:BORE(?:\s+DIAMETER)?|FORO\s+IR|IR\s+DIAMETER)\s*[:=]?\s*[Ø⌀]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,positive);
  scan("orDiametro",/\b(?:OUTER\s+DIAMETER|ESTERNO\s+OR|OR\s+DIAMETER)\s*[:=]?\s*[Ø⌀]?\s*(\d+(?:[.,]\d+)?)\s*mm\b/gi,positive);
  scan("classeGioco",/\b(?:RADIAL\s+CLEARANCE|GIOCO\s+RADIALE)\s*[:=.-]?\s*(C[2-5][LH]?|CN[LH]?)\b/gi,x=>x.toUpperCase());
@@ -466,8 +486,6 @@ function parseDrawingText(raw){
  for(const m of text.matchAll(/(?:^|\n)[ \t]*(?:(\d{1,3})[ \t|]+)?BALL[ \t|:=-]*(?:\n[ \t]*)?RB[ \t]*-[ \t]*(\d+[.,]\d+)(?=[ \t|\n]|$)/gi)){
   add("diametroSfera",positive(m[2]),m[0],true);if(m[1])add("numeroSfere",integer(m[1]),m[0],true);
  }
- scan("gabbiaTipo",/(?:^|\n)[ \t]*(?:\d+[ \t|]+)?CAGE[ \t|:=-]*(?:\n[ \t]*)?((?:CA|CG|C)\s*-\s*[A-Z0-9]+(?:[- ][A-Z0-9]+){0,2})(?=[ \t|\n]|$)/gi,upper,true);
- scan("schermoTipo",/(?:^|\n)[ \t]*(?:\d+[ \t|]+)?(?:SEAL|SHIELD)[ \t|:=-]*(?:\n[ \t]*)?((?:SR|SH|Z)\s*-\s*[A-Z0-9]+(?:[- ][A-Z0-9]+){0,2})(?=[ \t|\n]|$)/gi,upper,true);
  const weights=[...text.matchAll(/\b(?:GREASE\s+QUANTITY|QUANTIT[ÀA]\s+GRASSO)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(?:to|-|a)\s*(\d+(?:[.,]\d+)?)\s*g\b/gi)].map(m=>({min:num(m[1]),max:num(m[2]),ev:m[0]})).filter(m=>m.min!==null&&m.max!==null&&m.min<=m.max);
  for(const w of weights){add("pesoMin",w.min,w.ev);add("pesoMax",w.max,w.ev);}
  const results=[], conflicts=[];
@@ -508,7 +526,57 @@ function loadOcrLibrary(){
  }).catch(e=>{ocrLibraryPromise=null;throw e;});
  return ocrLibraryPromise;
 }
+
+let regionBitmap=null,regionBox=null,regionStart=null,regionEpoch=0;
+function clearOCRRegion(){
+ regionEpoch++;if(regionBitmap){regionBitmap.close();regionBitmap=null;}regionBox=null;regionStart=null;
+ const canvas=$("ocr-region-canvas");canvas.hidden=true;canvas.width=1;canvas.height=1;$("ocr-region-reset").hidden=true;$("ocr-region-info").textContent="";$("ocr-region-panel").hidden=true;
+}
+function regionPoint(event){
+ const b=$("ocr-region-canvas").getBoundingClientRect();
+ return {x:Math.max(0,Math.min(1,(event.clientX-b.left)/Math.max(1,b.width))),y:Math.max(0,Math.min(1,(event.clientY-b.top)/Math.max(1,b.height)))};
+}
+function drawRegion(){
+ if(!regionBitmap)return;const c=$("ocr-region-canvas"),ctx=c.getContext("2d");
+ ctx.drawImage(regionBitmap,0,0,c.width,c.height);
+ if(regionBox){const {x,y,w,h}=regionBox;ctx.fillStyle="rgba(0,85,140,.12)";ctx.fillRect(x*c.width,y*c.height,w*c.width,h*c.height);ctx.strokeStyle="#00a0ed";ctx.lineWidth=Math.max(2,c.width/230);ctx.strokeRect(x*c.width,y*c.height,w*c.width,h*c.height);}
+}
+async function getOCRFile(){
+ let file=editorFile;
+ if(!file&&keyPattern.test(draft?.base?.disegnoR2Key||""))file=await(await request("/api/photos?key="+encodeURIComponent(draft.base.disegnoR2Key))).blob();
+ if(!file)throw Error("Seleziona una foto o una ricetta con disegno R2.");
+ if(!/^image\/(jpeg|png|webp)$/.test(file.type)||!file.size||file.size>8*1024*1024)throw Error("Foto non valida.");
+ return file;
+}
+$("ocr-mode").addEventListener("change",()=>{$("ocr-region-panel").hidden=$("ocr-mode").value!=="region";});
+$("ocr-region-load").onclick=()=>action(async()=>{
+ if(!draft)return;const current=draft,epoch=regionEpoch;
+ const file=await getOCRFile(),bitmap=await createImageBitmap(file);
+ if(draft!==current||!connected||epoch!==regionEpoch){bitmap.close();return;}
+ if(regionBitmap)regionBitmap.close();regionBitmap=bitmap;regionBox=null;regionStart=null;
+ const c=$("ocr-region-canvas"),scale=Math.min(1,1000/Math.max(bitmap.width,bitmap.height));c.width=Math.max(1,Math.round(bitmap.width*scale));c.height=Math.max(1,Math.round(bitmap.height*scale));c.hidden=false;$("ocr-region-reset").hidden=false;drawRegion();$("ocr-region-info").textContent="Trascina il dito da un angolo all’altro della distinta.";
+});
+$("ocr-region-reset").onclick=()=>{if(busy)return;regionBox=null;regionStart=null;drawRegion();$("ocr-region-info").textContent="Traccia un nuovo rettangolo.";};
+const regionCanvas=$("ocr-region-canvas");
+regionCanvas.addEventListener("pointerdown",e=>{if(busy||!regionBitmap||!e.isPrimary)return;regionStart=regionPoint(e);regionBox=null;regionCanvas.setPointerCapture(e.pointerId);drawRegion();});
+regionCanvas.addEventListener("pointermove",e=>{if(!regionStart||!e.isPrimary)return;const p=regionPoint(e);regionBox={x:Math.min(p.x,regionStart.x),y:Math.min(p.y,regionStart.y),w:Math.abs(p.x-regionStart.x),h:Math.abs(p.y-regionStart.y)};drawRegion();});
+regionCanvas.addEventListener("pointerup",e=>{if(!regionStart||!e.isPrimary)return;const p=regionPoint(e);regionBox={x:Math.min(p.x,regionStart.x),y:Math.min(p.y,regionStart.y),w:Math.abs(p.x-regionStart.x),h:Math.abs(p.y-regionStart.y)};regionStart=null;if(regionBox.w*regionBitmap.width<20||regionBox.h*regionBitmap.height<20)regionBox=null;drawRegion();$("ocr-region-info").textContent=regionBox?"Area selezionata. Premi Leggi disegno.":"Area troppo piccola. Riprova.";});
+regionCanvas.addEventListener("pointercancel",()=>{regionStart=null;regionBox=null;drawRegion();});
+async function cropOCRRegion(){
+ if(!regionBitmap||!regionBox)throw Error("Apri il disegno e seleziona prima un rettangolo.");
+ const b=regionBox,im=regionBitmap,sw=Math.max(1,Math.round(b.w*im.width)),sh=Math.max(1,Math.round(b.h*im.height)),ratio=Math.min(3,2400/Math.max(sw,sh)),c=document.createElement("canvas");
+ c.width=Math.max(1,Math.round(sw*ratio));c.height=Math.max(1,Math.round(sh*ratio));
+ const ctx=c.getContext("2d",{willReadFrequently:true});ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";ctx.drawImage(im,Math.floor(b.x*im.width),Math.floor(b.y*im.height),sw,sh,0,0,c.width,c.height);
+ if($("ocr-region-contrast").checked){
+  const data=ctx.getImageData(0,0,c.width,c.height),p=data.data,hist=new Uint32Array(256);for(let i=0;i<p.length;i+=4)hist[Math.round(.299*p[i]+.587*p[i+1]+.114*p[i+2])]++;
+  const total=p.length/4;let low=0,high=255,n=0;for(;low<255;low++){n+=hist[low];if(n>=total*.015)break;}n=0;for(;high>0;high--){n+=hist[high];if(n>=total*.985)break;}
+  if(high-low>12){for(let i=0;i<p.length;i+=4){const g=.299*p[i]+.587*p[i+1]+.114*p[i+2],v=Math.max(0,Math.min(255,(g-low)*255/(high-low)));p[i]=p[i+1]=p[i+2]=v;}ctx.putImageData(data,0,0);}
+ }
+ return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error("Ritaglio non disponibile.")),"image/png"));
+}
+
 async function prepareOCRImage(file,mode){
+ if(mode==="region")return file;
  if(mode==="full")return file;
  const bitmap=await createImageBitmap(file);
  try{
@@ -534,7 +602,7 @@ async function readLocalOCR(file,mode){
    const w=await T.createWorker("eng",1,{workerPath:new URL("worker.min.js",root).href,corePath:new URL("core/",root).href,langPath:new URL("lang/",root).href,workerBlobURL:false,cacheMethod:"none",gzip:true,
     logger:m=>{if(finished)return;const p=Number(m.progress);bar.value=Number.isFinite(p)?Math.round(Math.max(0,Math.min(1,p))*100):0;message.textContent=m.status==="recognizing text"?"Riconoscimento testo: "+bar.value+"%":"Preparazione OCR: "+bar.value+"%";}});
    if(finished){await w.terminate();throw Error("OCR interrotto.");}worker=w;
-   await worker.setParameters({tessedit_pageseg_mode:mode==="table"?"6":"11",preserve_interword_spaces:"1"});
+   await worker.setParameters({tessedit_pageseg_mode:mode==="table"||mode==="region"?"6":"11",preserve_interword_spaces:"1"});
    const prepared=await prepareOCRImage(file,mode);
    const ret=await worker.recognize(prepared);
    return String(ret?.data?.text||"").trim();
@@ -546,11 +614,8 @@ $("ocr-read").onclick=()=>action(async()=>{
  if(!draft)return;
  const output=$("ocr-result");output.textContent="Lettura locale in corso…";$("ocr-read").disabled=true;$("ocr-suggest").disabled=true;
  try{
-  let file=editorFile;
-  if(!file&&keyPattern.test(draft.base.disegnoR2Key||""))file=await(await request("/api/photos?key="+encodeURIComponent(draft.base.disegnoR2Key))).blob();
-  if(!file)throw Error("Seleziona una foto o una ricetta con disegno R2.");
-  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||!file.size||file.size>8*1024*1024)throw Error("Foto non valida.");
   const mode=$("ocr-mode").value;
+  const file=mode==="region"?await cropOCRRegion():await getOCRFile();
   const text=await readLocalOCR(file,mode);
   if(!text)throw Error("Nessun testo riconosciuto. Prova con una foto più nitida.");
   if(!draft||!connected)return;
@@ -589,7 +654,7 @@ function openEditor(row=null,source=null){
 function chooseEditorFile(f){
  if(!draft||busy||!f)return;
  if(!/^image\/(jpeg|png|webp)$/.test(f.type)||!f.size||f.size>8*1024*1024){$("editor-file").value="";$("editor-capture").value="";editorFile=null;$("editor-file-status").textContent="Formato non valido: JPG, PNG, WebP, fino a 8 MB.";return;}
- editorFile=f;$("editor-file-status").textContent="Foto selezionata: "+f.name+". Verrà caricata al salvataggio.";
+ clearOCRRegion();$("ocr-mode").value="full";editorFile=f;$("editor-file-status").textContent="Foto selezionata: "+f.name+". Verrà caricata al salvataggio.";
 }
 async function saveEditor(event){
  event.preventDefault();if(!draft||busy||!connected)return;
