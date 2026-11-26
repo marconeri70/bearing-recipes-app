@@ -74,14 +74,64 @@ function render(){
  renderArchived();
  syncControls();
 }
+
+const BASE_CLEARANCE_CLASSES=["C2","C2L","C2H","CN","CNL","CNH","C3","C3L","C3H","C4","C4L","C4H","C5","C5L","C5H"];
+function normalizeClass(v){return String(v??"").trim().toUpperCase();}
+function listClearanceClasses(rows=[],recipes=[],extra=[]){
+ const all=new Set(BASE_CLEARANCE_CLASSES);
+ for(const value of [...rows.map(x=>x.classe),...recipes.map(x=>x.recipe?.classeGioco),...extra]){
+  const c=normalizeClass(value);if(c)all.add(c);
+ }
+ return [...BASE_CLEARANCE_CLASSES,...[...all].filter(c=>!BASE_CLEARANCE_CLASSES.includes(c)).sort((a,b)=>a.localeCompare(b,"it",{numeric:true}))];
+}
+function classCounts(recipes){
+ const counts=new Map();
+ for(const row of recipes){if(row.deleted)continue;const c=normalizeClass(row.recipe?.classeGioco);if(c)counts.set(c,(counts.get(c)||0)+1);}
+ return counts;
+}
+function classSource(c,rows,ready){
+ if(!ready)return "tabelle da caricare";
+ if(rows.some(x=>x.classe===c&&x.kind!=="storica"))return "tabella SKF";
+ if(rows.some(x=>x.classe===c&&x.kind==="storica"))return "solo storica";
+ return "limiti manuali";
+}
+function refreshEditorClasses(select,prior){
+ const value=String(prior??"");
+ const classes=listClearanceClasses(skfRows,remote,[value]);
+ select.replaceChildren();
+ const blank=element("option","Seleziona classe");blank.value="";select.append(blank);
+ for(const c of classes){
+  const opt=element("option",c+" · "+classSource(c,skfRows,skfReady));
+  opt.value=c;select.append(opt);
+ }
+ if(value&&!classes.includes(value)){const opt=element("option",value+" · valore registrato");opt.value=value;select.append(opt);}
+ const custom=element("option","Altra classe / codice speciale…");custom.value="__custom_class__";select.append(custom);
+ select.value=value;select.dataset.previous=select.value;
+}
+function setEditorClass(value){
+ const select=$("ed-classeGioco");if(!select)return;
+ refreshEditorClasses(select,value);
+}
+function onEditorClassChange(select){
+ if(select.value==="__custom_class__"){
+  const value=prompt("Inserisci il codice esatto della classe speciale, come da disegno.", "");
+  if(value!==null&&value.trim()&&value.trim().length<=100&&value.trim()!=="__custom_class__")setEditorClass(value.trim());
+  else select.value=select.dataset.previous||"";
+ }
+ select.dataset.previous=select.value;previewSKF();
+}
+
 function renderCloudCatalog(){
  const remoteList=$("remotes");remoteList.replaceChildren();
  const query=$("cloud-search").value.trim().toLowerCase(), ir=$("cloud-ir").value.trim(), or=$("cloud-or").value.trim(), ball=$("cloud-ball").value.trim(), grMin=$("cloud-gr-min").value.trim(), grMax=$("cloud-gr-max").value.trim(), grMode=$("cloud-gr-mode").value;
  const error=validateCatalogFilters(ir,or,ball,grMin,grMax,grMode);$("filter-error").textContent=error;$("filter-error").hidden=!error;
  $("cloud-gr-hint").textContent=grMode==="exact"?"Mostra soltanto le ricette con gli stessi limiti min e max registrati.":"Un solo valore: cerca ricette il cui gioco registrato lo comprende. Due valori: cerca intervalli che si sovrappongono, anche ai limiti.";
  const classSelect=$("cloud-class"),selected=classSelect.value;
- const classes=[...new Set(remote.filter(x=>!x.deleted).map(x=>String(x.recipe?.classeGioco||"").trim().toUpperCase()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"it",{numeric:true}));
- classSelect.replaceChildren();for(const value of ["",...classes]){const opt=element("option",value||"Tutte le classi");opt.value=value;classSelect.append(opt);}
+ const classes=listClearanceClasses(skfRows,remote),counts=classCounts(remote);
+ classSelect.replaceChildren();for(const value of ["",...classes]){
+  const label=value?value+" ("+(counts.get(value)||0)+")":"Tutte le classi ("+remote.filter(x=>!x.deleted).length+")";
+  const opt=element("option",label);opt.value=value;classSelect.append(opt);
+ }
  classSelect.value=classes.includes(selected)?selected:"";
  const rows=error?[]:remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or,ball,grMin,grMax,grMode)&&(!classSelect.value||String(row.recipe?.classeGioco||"").trim().toUpperCase()===classSelect.value));
  $("cloud-filter-count").textContent=connected?(error?"Controlla i filtri inseriti.":rows.length+" ricette trovate su "+remote.filter(x=>!x.deleted).length):"Collega l’archivio per visualizzare le ricette.";
@@ -333,7 +383,8 @@ async function loadSKF(){
   const lists=await Promise.all(inputs.map(async ([path,kind])=>{const res=await fetch("./"+path,{cache:"no-store",credentials:"omit"});if(!res.ok)throw Error("Tabella non disponibile");const rows=parseSKF(await res.text(),kind);if(!rows.length)throw Error("Tabella vuota");return rows;}));
   skfRows=lists.flat();skfReady=true;
  }catch{skfReady=false;}
- if(draft)previewSKF();
+ if(draft){const select=$("ed-classeGioco");if(select)refreshEditorClasses(select,select.value);previewSKF();}
+ if(connected)renderCloudCatalog();
 }
 function previewSKF(){
  const output=$("skf-result"),apply=$("skf-apply");skfProposal=null;apply.disabled=true;
@@ -431,7 +482,7 @@ function renderOCR(){
  }
  const apply=element("button","Applica solo i campi selezionati");apply.type="button";apply.className="secondary";apply.onclick=()=>{
   if(!draft||busy)return;const chosen=checks.filter(([cb])=>cb.checked);if(!chosen.length||!confirm("Applicare "+chosen.length+" valori verificati? Nessun dato sarà salvato prima della conferma della ricetta."))return;
-  for(const [,item] of chosen)$("ed-"+item.key).value=item.value;previewSKF();result.replaceChildren(element("p","Valori inseriti nella scheda, non ancora salvati."));
+  for(const [,item] of chosen){if(item.key==="classeGioco")setEditorClass(item.value);else $("ed-"+item.key).value=item.value;}previewSKF();result.replaceChildren(element("p","Valori inseriti nella scheda, non ancora salvati."));
  };result.append(apply);
 }
 $("ocr-suggest").onclick=()=>{if(draft&&!busy)renderOCR();};
@@ -510,14 +561,15 @@ function openEditor(row=null,source=null){
  $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":source?"Inserisci un nuovo codice, verifica tutti i dati e allega il disegno corretto. Il disegno originale non viene duplicato.":"Nuovo codice nell’archivio online";
  for(const k of fields){
   const label=element("label",fieldLabels[k]||k,k==="codice"?"wide":"");
-  const input=element(k==="serieGioco"?"select":"input");input.id="ed-"+k;
+  const input=element(k==="serieGioco"||k==="classeGioco"?"select":"input");input.id="ed-"+k;
   if(k==="serieGioco"){const values=["","storica","BCG02","BCG04","BCG06"];const prior=draft.base[k]||"";if(prior&&!values.includes(prior))values.push(prior);for(const v of values){const opt=element("option",v||"Seleziona riferimento");opt.value=v;input.append(opt);}}
-  input.value=draft.base[k]??"";input.maxLength=k==="codice"?200:4000;
-  if(["serieGioco","classeGioco","irDiametro"].includes(k))input.addEventListener("input",previewSKF);
+  if(k==="classeGioco"){refreshEditorClasses(input,draft.base[k]??"");input.addEventListener("change",()=>onEditorClassChange(input));}
+  else {input.value=draft.base[k]??"";if(["serieGioco","irDiametro"].includes(k))input.addEventListener("input",previewSKF);}
+  input.maxLength=k==="codice"?200:4000;
   if(k==="codice"){input.required=true;input.readOnly=!!row;}
   if(numericFields.has(k))input.inputMode="decimal";
   if(k==="serieGioco")input.placeholder="storica / BCG02 / BCG04 / BCG06";
-  label.append(input);$("editor-fields").append(label);
+  label.append(input);if(k==="classeGioco")label.append(element("small","Le classi speciali senza tabella richiedono limiti verificati sul disegno.","class-info"));$("editor-fields").append(label);
  }
  $("editor-drawing").textContent=draft.base.disegnoR2Key?"Disegno privato R2 presente.":draft.base.disegnoUrl?"Vecchio link presente. Seleziona una foto per sostituirlo con il file R2.":"Nessun disegno associato.";
  $("cloud-editor").hidden=false;$("cloud-editor").scrollIntoView({block:"start"});syncControls();previewSKF();
@@ -538,6 +590,7 @@ async function saveEditor(event){
    else recipe[k]=v;
   }
   if(!code(recipe))throw Error("Inserisci il codice.");
+  if(recipe.classeGioco==="__custom_class__")throw Error("Seleziona una classe valida.");
   if(recipe.giocoMin!=null&&recipe.giocoMax!=null&&recipe.giocoMin>recipe.giocoMax)throw Error("Gioco minimo superiore al massimo.");
   if(recipe.pesoMin!=null&&recipe.pesoMax!=null&&recipe.pesoMin>recipe.pesoMax)throw Error("Peso minimo superiore al massimo.");
   for(const k of ["disegnoUrl","disegnoR2Key"])if(current.base[k])recipe[k]=current.base[k];
