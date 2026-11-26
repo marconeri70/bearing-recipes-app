@@ -76,23 +76,25 @@ function render(){
 }
 function renderCloudCatalog(){
  const remoteList=$("remotes");remoteList.replaceChildren();
- const query=$("cloud-search").value.trim().toLowerCase(), ir=$("cloud-ir").value.trim(), or=$("cloud-or").value.trim();
+ const query=$("cloud-search").value.trim().toLowerCase(), ir=$("cloud-ir").value.trim(), or=$("cloud-or").value.trim(), ball=$("cloud-ball").value.trim(), grMin=$("cloud-gr-min").value.trim(), grMax=$("cloud-gr-max").value.trim(), grMode=$("cloud-gr-mode").value;
+ const error=validateCatalogFilters(ir,or,ball,grMin,grMax,grMode);$("filter-error").textContent=error;$("filter-error").hidden=!error;
+ $("cloud-gr-hint").textContent=grMode==="exact"?"Mostra soltanto le ricette con gli stessi limiti min e max registrati.":"Un solo valore: cerca ricette il cui gioco registrato lo comprende. Due valori: cerca intervalli che si sovrappongono, anche ai limiti.";
  const classSelect=$("cloud-class"),selected=classSelect.value;
  const classes=[...new Set(remote.filter(x=>!x.deleted).map(x=>String(x.recipe?.classeGioco||"").trim().toUpperCase()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"it",{numeric:true}));
  classSelect.replaceChildren();for(const value of ["",...classes]){const opt=element("option",value||"Tutte le classi");opt.value=value;classSelect.append(opt);}
  classSelect.value=classes.includes(selected)?selected:"";
- const rows=remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or)&&(!classSelect.value||String(row.recipe?.classeGioco||"").trim().toUpperCase()===classSelect.value));
- $("cloud-filter-count").textContent=connected?rows.length+" ricette trovate":"Collega l’archivio per visualizzare le ricette.";
+ const rows=error?[]:remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or,ball,grMin,grMax,grMode)&&(!classSelect.value||String(row.recipe?.classeGioco||"").trim().toUpperCase()===classSelect.value));
+ $("cloud-filter-count").textContent=connected?(error?"Controlla i filtri inseriti.":rows.length+" ricette trovate su "+remote.filter(x=>!x.deleted).length):"Collega l’archivio per visualizzare le ricette.";
  for(const row of rows){
   const r=row.recipe||{},box=element("article",null,"recipe-row"),info=element("div",null,"recipe-info");
-  info.append(element("strong",r.codice||row.code),element("small","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm"),element("small",r.classeGioco?"Gioco "+r.classeGioco+": "+(r.giocoMin??"—")+" – "+(r.giocoMax??"—")+" µm":"Gioco non registrato"));
+  info.append(element("strong",r.codice||row.code),element("small","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm"),element("small","Sfera Ø "+(r.diametroSfera??"—")+" mm"),element("small",(r.classeGioco?"Gioco "+r.classeGioco:"Gioco radiale")+": "+(r.giocoMin??"—")+" – "+(r.giocoMax??"—")+" µm"));
   if(keyPattern.test(r.disegnoR2Key||""))info.append(element("span","Disegno R2","tag"));else if(r.disegnoUrl)info.append(element("span","Link esterno","tag"));
   info.append(element("span","V"+row.revision,"tag"));
   if($("show-thumbs").checked){if(keyPattern.test(r.disegnoR2Key||"")){const thumb=element("img",null,"recipe-thumb");thumb.alt="";thumb.loading="lazy";box.append(thumb);queueThumb(thumb,r.disegnoR2Key);}else{box.append(element("div",r.disegnoUrl?"LINK":"NO FOTO","recipe-thumb recipe-thumb-empty"));}}
   box.append(info,button("Apri",()=>openSheet(row)));
   box.addEventListener("click",e=>{if(!e.target.closest("button")&&!busy)openSheet(row);});remoteList.append(box);
  }
- if(connected&&!rows.length)remoteList.append(element("p","Nessuna ricetta corrispondente."));
+ if(connected&&!rows.length&&!error)remoteList.append(element("p","Nessuna ricetta corrispondente. I dati non registrati sono esclusi dai relativi filtri."));
  if(sheetCode&&!remote.some(x=>x.code===sheetCode&&!x.deleted))clearSheet();
  syncControls();
 }
@@ -288,9 +290,24 @@ function numberValue(x){
  if(!v||!/^\d+(?:[.,]\d+)?$/.test(v))return null;
  const n=Number(v.replace(",","."));return Number.isFinite(n)?n:null;
 }
-function matchesCloud(r,q,ir,or){
- const has=(k,v)=>!v||(numberValue(v)!==null&&numberValue(v)>0&&numberValue(r[k])===numberValue(v));
- return (!q||[r.codice,r.irTipo,r.orTipo,r.classeGioco].some(v=>String(v??"").toLowerCase().includes(q)))&&has("irDiametro",ir)&&has("orDiametro",or);
+function validateCatalogFilters(ir,or,ball,grMin,grMax,mode){
+ for(const [name,value] of [["Foro IR",ir],["Esterno OR",or],["Diametro sfera",ball]]){
+  if(value&&(numberValue(value)===null||numberValue(value)<=0))return "Inserisci un diametro valido per "+name+".";
+ }
+ if(grMin&&numberValue(grMin)===null||grMax&&numberValue(grMax)===null)return "Inserisci valori numerici validi del gioco radiale, in µm.";
+ if(grMax&&!grMin)return "Inserisci anche il primo valore del gioco radiale.";
+ if(grMin&&grMax&&numberValue(grMin)>numberValue(grMax))return "Il limite iniziale del gioco non può superare quello finale.";
+ if(mode==="exact"&&grMin&&!grMax)return "Per i limiti esatti inserisci entrambi i valori min e max.";
+ return "";
+}
+function matchesCloud(r,q,ir,or,ball="",grMin="",grMax="",mode="compatible"){
+ if(validateCatalogFilters(ir,or,ball,grMin,grMax,mode))return false;
+ const has=(k,v)=>!v||(numberValue(r[k])!==null&&numberValue(r[k])===numberValue(v));
+ if(!(!q||[r.codice,r.irTipo,r.orTipo,r.classeGioco,r.gabbiaTipo,r.grassoTipo,r.schermoTipo].some(v=>String(v??"").toLowerCase().includes(q)))||!has("irDiametro",ir)||!has("orDiametro",or)||!has("diametroSfera",ball))return false;
+ if(!grMin&&!grMax)return true;
+ const lo=numberValue(r.giocoMin),hi=numberValue(r.giocoMax),a=numberValue(grMin),b=grMax?numberValue(grMax):a;
+ if(lo===null||hi===null||lo>hi)return false;
+ return mode==="exact"?lo===a&&hi===b:lo<=b&&hi>=a;
 }
 
 let skfRows=[],skfReady=false,skfProposal=null;
@@ -637,7 +654,8 @@ $("restore-run").onclick=()=>{
 
 $("new-cloud").onclick=()=>openEditor();
 $("key").addEventListener("keydown",e=>{if(e.key==="Enter"&&!busy&&!connected){e.preventDefault();$("login").click();}});
-for(const id of ["cloud-search","cloud-ir","cloud-or","cloud-class","show-thumbs"])$(id).addEventListener("input",renderCloudCatalog);
+for(const id of ["cloud-search","cloud-ir","cloud-or","cloud-ball","cloud-gr-min","cloud-gr-max","cloud-gr-mode","cloud-class","show-thumbs"])$(id).addEventListener("input",renderCloudCatalog);
+$("clear-filters").onclick=()=>{for(const id of ["cloud-search","cloud-ir","cloud-or","cloud-ball","cloud-gr-min","cloud-gr-max","cloud-class"])$(id).value="";$("cloud-gr-mode").value="compatible";renderCloudCatalog();};
 $("editor-file").onchange=e=>chooseEditorFile(e.target.files[0]);
 $("editor-capture").onchange=e=>chooseEditorFile(e.target.files[0]);
 $("editor-camera").onclick=()=>$("editor-capture").click();
