@@ -127,21 +127,31 @@ function renderCloudCatalog(){
  const error=validateCatalogFilters(ir,or,ball,grMin,grMax,grMode);$("filter-error").textContent=error;$("filter-error").hidden=!error;
  $("cloud-gr-hint").textContent=grMode==="exact"?"Mostra soltanto le ricette con gli stessi limiti min e max registrati.":"Un solo valore: cerca ricette il cui gioco registrato lo comprende. Due valori: cerca intervalli che si sovrappongono, anche ai limiti.";
  const classSelect=$("cloud-class"),selected=classSelect.value;
+ const active=remote.filter(x=>!x.deleted);
+ $("stat-active").textContent=connected?active.length:"—";
+ $("stat-photos").textContent=connected?active.filter(x=>keyPattern.test(x.recipe?.disegnoR2Key||"")).length:"—";
+ $("stat-classes").textContent=connected?classCounts(active).size:"—";
  const classes=listClearanceClasses(skfRows,remote),counts=classCounts(remote);
  classSelect.replaceChildren();for(const value of ["",...classes]){
   const label=value?value+" ("+(counts.get(value)||0)+")":"Tutte le classi ("+remote.filter(x=>!x.deleted).length+")";
   const opt=element("option",label);opt.value=value;classSelect.append(opt);
  }
  classSelect.value=classes.includes(selected)?selected:"";
+ const technical=[["IR",ir,"mm"],["OR",or,"mm"],["Sfera",ball,"mm"],["Classe",classSelect.value,""],["Gioco",grMin?(grMin+(grMax?"–"+grMax:"")):grMax,"µm"]].filter(x=>x[1]);
+ $("active-filter-count").textContent=technical.length;
+ const chips=$("filter-chips");chips.replaceChildren();
+ for(const [label,value,unit] of technical)chips.append(element("span",label+" "+value+(unit?" "+unit:""),"filter-chip"));
+ if(error)$("advanced-filters").open=true;
  const rows=error?[]:remote.filter(row=>!row.deleted&&matchesCloud(row.recipe||{},query,ir,or,ball,grMin,grMax,grMode)&&(!classSelect.value||String(row.recipe?.classeGioco||"").trim().toUpperCase()===classSelect.value));
  $("cloud-filter-count").textContent=connected?(error?"Controlla i filtri inseriti.":rows.length+" ricette trovate su "+remote.filter(x=>!x.deleted).length):"Collega l’archivio per visualizzare le ricette.";
  for(const row of rows){
   const r=row.recipe||{},box=element("article",null,"recipe-row"),info=element("div",null,"recipe-info");
-  info.append(element("strong",r.codice||row.code),element("small","IR "+(r.irDiametro??"—")+" mm · OR "+(r.orDiametro??"—")+" mm"),element("small","Sfera Ø "+(r.diametroSfera??"—")+" mm"),element("small",(r.classeGioco?"Gioco "+r.classeGioco:"Gioco radiale")+": "+(r.giocoMin??"—")+" – "+(r.giocoMax??"—")+" µm"));
-  if(keyPattern.test(r.disegnoR2Key||""))info.append(element("span","Disegno R2","tag"));else if(r.disegnoUrl)info.append(element("span","Link esterno","tag"));
+  info.append(element("strong",r.codice||row.code),element("small","IR "+(r.irDiametro??"—")+" · OR "+(r.orDiametro??"—")+" mm"),element("small","Sfera Ø "+(r.diametroSfera??"—")+" mm"),element("small",(r.classeGioco?"Gioco "+r.classeGioco:"Gioco radiale")+": "+(r.giocoMin??"—")+" – "+(r.giocoMax??"—")+" µm","clearance-line"));
+  if(keyPattern.test(r.disegnoR2Key||""))info.append(element("span","Disegno R2","tag photo-ok"));else if(r.disegnoUrl)info.append(element("span","Link esterno","tag photo-link"));
   info.append(element("span","V"+row.revision,"tag"));
   if($("show-thumbs").checked){if(keyPattern.test(r.disegnoR2Key||"")){const thumb=element("img",null,"recipe-thumb");thumb.alt="";thumb.loading="lazy";box.append(thumb);queueThumb(thumb,r.disegnoR2Key);}else{box.append(element("div",r.disegnoUrl?"LINK":"NO FOTO","recipe-thumb recipe-thumb-empty"));}}
-  box.append(info,button("Apri",()=>openSheet(row)));
+  if(!$("show-thumbs").checked)box.classList.add("no-thumb");
+  box.append(info,button("Apri ›",()=>openSheet(row)));
   box.addEventListener("click",e=>{if(!e.target.closest("button")&&!busy)openSheet(row);});remoteList.append(box);
  }
  if(connected&&!rows.length&&!error)remoteList.append(element("p","Nessuna ricetta corrispondente. I dati non registrati sono esclusi dai relativi filtri."));
@@ -213,7 +223,7 @@ function renderSheet(row){
  const groups=[["Anelli e dimensioni",["irTipo","irDiametro","orTipo","orDiametro"]],["Componenti",["diametroSfera","numeroSfere","gabbiaTipo","schermoTipo"]],["Lubrificazione",["grassoTipo","pesoMin","pesoMax"]],["Controllo gioco radiale",["classeGioco","serieGioco","giocoMin","giocoMax"]]];
  for(const [label,keys] of groups){
   box.append(element("h3",label,"sheet-group"));const grid=element("div",null,"grid sheet-grid");
-  for(const k of keys){const item=element("div",null,"metric");item.append(element("small",fieldLabels[k]||k),element("b",String(r[k]??"—")));grid.append(item);}
+  for(const k of keys){const missing=r[k]==null||r[k]==="";const item=element("div",null,"metric"+(missing?" metric-missing":label==="Controllo gioco radiale"?" metric-clearance":label==="Lubrificazione"?" metric-lube":""));item.append(element("small",fieldLabels[k]||k),element("b",String(r[k]??"—")));grid.append(item);}
   box.append(grid);
  }
  const missing=fields.filter(k=>k!=="codice"&&(r[k]==null||r[k]==="")).length;
@@ -559,7 +569,9 @@ function openEditor(row=null,source=null){
  editorFile=null;clearOCR();$("editor-form").reset();$("editor-fields").replaceChildren();$("editor-status").textContent="";$("editor-file-status").textContent="";
  $("editor-title").textContent=row?"Modifica "+row.recipe.codice:source?"Duplica da "+source.recipe.codice:"Nuova ricetta cloud";
  $("editor-revision").textContent=row?"Versione "+row.revision+" · nessuna modifica automatica ai dati locali":source?"Inserisci un nuovo codice, verifica tutti i dati e allega il disegno corretto. Il disegno originale non viene duplicato.":"Nuovo codice nell’archivio online";
+ const groupTitles={codice:"Identificazione",irTipo:"Anelli e dimensioni",diametroSfera:"Componenti",grassoTipo:"Lubrificazione e tenute",classeGioco:"Controllo gioco radiale"};
  for(const k of fields){
+  if(groupTitles[k])$("editor-fields").append(element("h3",groupTitles[k],"editor-group"));
   const label=element("label",fieldLabels[k]||k,k==="codice"?"wide":"");
   const input=element(k==="serieGioco"||k==="classeGioco"?"select":"input");input.id="ed-"+k;
   if(k==="serieGioco"){const values=["","storica","BCG02","BCG04","BCG06"];const prior=draft.base[k]||"";if(prior&&!values.includes(prior))values.push(prior);for(const v of values){const opt=element("option",v||"Seleziona riferimento");opt.value=v;input.append(opt);}}
